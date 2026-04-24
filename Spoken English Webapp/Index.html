@@ -1,967 +1,1060 @@
 <!DOCTYPE html>
 <html>
-   <head>
-      <base target="_top">
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-      <?!= include('Styles'); ?>
-   </head>
-   <body>
-      <!-- Main App Container -->
-      <div class="d-flex" id="app-wrapper">
-         <!-- Sidebar -->
-         <nav class="sidebar bg-light border-end" id="sidebar">
-            <div class="sidebar-header border-bottom">
-               <!-- Placeholder for Logo -->
-               <a href="#" class="d-flex align-items-center text-decoration-none p-3" onclick="switchView('dashboardView'); return false;">
-               <i class="bi bi-book-half fs-4 me-2"></i>
-               <span class="fs-5 fw-semibold">Spoken English</span>
-               </a>
-            </div>
-            <div class="list-group list-group-flush">
-               <!-- Navigation links will be dynamically shown based on role -->
-               <a href="#" class="list-group-item list-group-item-action" onclick="switchView('dashboardView'); return false;" id="nav-dashboard">
-               <i class="bi bi-grid-1x2-fill me-2"></i> Dashboard
-               </a>
-               <a href="#" class="list-group-item list-group-item-action" onclick="loadAssessmentView(); return false;" id="nav-assessment">
-               <i class="bi bi-card-checklist me-2"></i> Assessment
-               </a>
-               <a href="#" class="list-group-item list-group-item-action" onclick="loadManagementView(); return false;" id="nav-manage" style="display: none;">
-               <i class="bi bi-people-fill me-2"></i> Manage
-               </a>
-            </div>
-         </nav>
-         <!-- Page Content -->
-         <main class="main-content flex-grow-1">
-            <div class="container-fluid p-4">
-               <!-- Loading Spinner View -->
-               <div id="loadingView" class="view">
-                  <div class="d-flex justify-content-center align-items-center" style="height: 80vh;">
-                     <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                     </div>
-                  </div>
-               </div>
-               <!-- PIN Entry View -->
-               <div id="pinView" class="view" style="display: none;">
-                  <div class="row justify-content-center mt-5">
-                     <div class="col-md-6 col-lg-4">
-                        <div class="card shadow-sm">
-                           <div class="card-body p-4">
-                              <h3 class="card-title text-center mb-4">Volunteer Login</h3>
-                              <p class="text-center text-muted">Enter your PIN to continue.</p>
-                              <div class="mb-3">
-                                 <input type="password" id="pinInput" class="form-control form-control-lg text-center" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
-                              </div>
-                              <div class="d-grid">
-                                 <button class="btn btn-primary btn-lg" onclick="handlePinSubmit()">Unlock</button>
-                              </div>
-                              <div id="pinError" class="text-danger mt-3 text-center" style="display: none;">Invalid PIN.</div>
-                           </div>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-               <!-- Dashboard View -->
-               <div id="dashboardView" class="view" style="display: none;">
-                  <h1 class="mb-4">Dashboard</h1>
-                  <p>Welcome, <span id="userEmail" class="fw-bold"></span>!</p>
-                  <p>Your role is: <span id="userRole" class="badge bg-success"></span></p>
-                  <!-- Summary cards would go here -->
-                  <div class="row">
-                     <div class="col-md-4 mb-3">
-                        <div class="card text-center">
-                           <div class="card-body">
-                              <h5 class="card-title">Schools</h5>
-                              <p class="card-text fs-1">--</p>
-                           </div>
-                        </div>
-                     </div>
-                     <div class="col-md-4 mb-3">
-                        <div class="card text-center">
-                           <div class="card-body">
-                              <h5 class="card-title">Students</h5>
-                              <p class="card-text fs-1">--</p>
-                           </div>
-                        </div>
-                     </div>
-                     <div class="col-md-4 mb-3">
-                        <div class="card text-center">
-                           <div class="card-body">
-                              <h5 class="card-title">Assessments</h5>
-                              <p class="card-text fs-1">--</p>
-                           </div>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-               <!-- Assessment View -->
-               <div id="assessmentView" class="view" style="display: none;">
-                  <h1 class="mb-4">Student Assessment</h1>
-                  <div class="card shadow-sm">
-                     <div class="card-body">
-                        <!-- Step 1: Select School & Type -->
-                        <div class="row g-3" id="assessment-setup">
-                           <div class="col-md-6">
-                              <label for="schoolSelect" class="form-label">Select School</label>
-                              <select id="schoolSelect" class="form-select"></select>
-                           </div>
-                           <div class="col-md-4">
-                              <label for="assessmentTypeSelect" class="form-label">Assessment Type</label>
-                              <select id="assessmentTypeSelect" class="form-select">
-                                 <option value="">--Select Type--</option>
-                                 <option value="Baseline">Baseline</option>
-                                 <option value="Midline">Midline</option>
-                                 <option value="Endline">Endline</option>
-                              </select>
-                           </div>
-                           <div class="col-md-2 d-flex align-items-end">
-                              <button class="btn btn-primary w-100" onclick="loadStudentGrid()">Load Students</button>
-                           </div>
-                        </div>
-                        <div id="validation-error" class="alert alert-danger mt-3" style="display:none;"></div>
-                        <!-- Step 2: Student Grid -->
-                        <div id="student-grid-container" class="mt-4" style="display: none;">
-                           <div class="table-responsive">
-                              <table class="table table-bordered table-hover">
-                                 <thead id="assessment-grid-head"></thead>
-                                 <tbody id="assessment-grid-body"></tbody>
-                              </table>
-                           </div>
-                           <button class="btn btn-success float-end mt-3" onclick="handleSaveAssessments()">
-                           <i class="bi bi-check-circle-fill me-2"></i> Save Assessments
-                           </button>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-               <!-- Manage View -->
-               <div id="manageView" class="view" style="display: none;">
-                  <h1 class="mb-4">Management</h1>
-                  <div class="card shadow-sm">
-                     <div class="card-header">
-                        <ul class="nav nav-tabs card-header-tabs" id="manageTabs" role="tablist">
-                           <li class="nav-item" role="presentation">
-                              <button class="nav-link active" id="add-school-tab" data-bs-toggle="tab" data-bs-target="#add-school" type="button" role="tab">Add School</button>
-                           </li>
-                           <li class="nav-item" role="presentation">
-                              <button class="nav-link" id="add-volunteer-tab" data-bs-toggle="tab" data-bs-target="#add-volunteer" type="button" role="tab">Add Volunteer</button>
-                           </li>
-                           <li class="nav-item" role="presentation">
-                              <button class="nav-link" id="map-volunteer-tab" data-bs-toggle="tab" data-bs-target="#map-volunteer" type="button" role="tab">Map Volunteer</button>
-                           </li>
-                           <li class="nav-item">
-                              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#manage-students">
-                              Manage Students
-                              </button>
-                           </li>
-                        </ul>
-                     </div>
-                     <div class="card-body">
-                        <div class="tab-content" id="manageTabsContent">
-                           <!-- Add School Form -->
-                           <div class="tab-pane fade show active" id="add-school" role="tabpanel">
-                              <h5 class="mb-3">New School Details</h5>
-                              <form id="formAddSchool" onsubmit="handleAddSchool(event)">
-                                 <div class="row g-3">
-                                    <div class="col-md-6"><label class="form-label">School Name</label><input type="text" id="schoolName" class="form-control" required></div>
-                                    <div class="col-md-6"><label class="form-label">Region</label><input type="text" id="schoolRegion" class="form-control" required></div>
-                                    <div class="col-md-6"><label class="form-label">Chapter</label><input type="text" id="schoolChapter" class="form-control" required></div>
-                                    <div class="col-md-6"><label class="form-label">Taluk</label><input type="text" id="schoolTaluk" class="form-control"></div>
-                                    <div class="col-md-6"><label class="form-label">District</label><input type="text" id="schoolDistrict" class="form-control"></div>
-                                    <div class="col-md-6"><label class="form-label">Total Strength</label><input type="number" id="schoolStrength" class="form-control" required></div>
-                                 </div>
-                                 <button type="submit" class="btn btn-primary mt-4">Add School</button>
-                              </form>
-                           </div>
-                           <!-- Add Volunteer Form -->
-                           <div class="tab-pane fade" id="add-volunteer" role="tabpanel">
-                              <h5 class="mb-3">New Volunteer Details</h5>
-                              <form id="formAddVolunteer" onsubmit="handleAddVolunteer(event)">
-                                 <div class="row g-3">
-                                    <div class="col-md-6"><label class="form-label">Name</label><input type="text" id="volunteerName" class="form-control" required></div>
-                                    <div class="col-md-6"><label class="form-label">Email</label><input type="email" id="volunteerEmail" class="form-control" required></div>
-                                    <div class="col-md-4"><label class="form-label">PIN (4 digits)</label><input type="text" id="volunteerPin" class="form-control" required pattern="\d{4}" title="PIN must be 4 digits."></div>
-                                    <div class="col-md-4"><label class="form-label">Region</label><input type="text" id="volunteerRegion" class="form-control" required></div>
-                                    <div class="col-md-4"><label class="form-label">Chapter</label><input type="text" id="volunteerChapter" class="form-control" required></div>
-                                 </div>
-                                 <button type="submit" class="btn btn-primary mt-4">Add Volunteer</button>
-                              </form>
-                           </div>
-                            <!-- Map Volunteer Form -->
-                            <div class="tab-pane fade" id="map-volunteer" role="tabpanel">
-                                <h5 class="mb-3">Map Volunteer to School</h5>
-                                <form id="formMapVolunteer" onsubmit="handleMapVolunteer(event)">
-                                    <div class="row g-3">
-                                        <div class="col-md-6">
-                                            <label class="form-label">Search & Select Volunteer</label>
-                                            <input type="text" class="form-control mb-2 searchable-dropdown" placeholder="Type to search..." data-target-select="mapVolunteerSelect">
-                                            <select id="mapVolunteerSelect" class="form-select" required size="5"></select>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">Search & Select School</label>
-                                            <input type="text" class="form-control mb-2 searchable-dropdown" placeholder="Type to search..." data-target-select="mapSchoolSelect">
-                                            <select id="mapSchoolSelect" class="form-select" required size="5"></select>
-                                        </div>
-                                    </div>
-                                    <button type="submit" class="btn btn-primary mt-4">Create Mapping</button>
-                                </form>
-                            </div>
-                            <!-- Add Students Form -->
-                            <div class="tab-pane fade" id="manage-students">
-                                <div class="row">
-                                    <div class="col-md-8 col-lg-6">
-                                        <h5 class="mb-3">Select School</h5>
-                                        <!-- The Search Input -->
-                                        <input type="text" class="form-control mb-2 searchable-dropdown" placeholder="Type to search for a school..." data-target-select="manageSchoolSelect">
-                                        
-                                        <!-- The Select Dropdown -->
-                                        <select id="manageSchoolSelect" class="form-select mb-3"></select>
-                                    </div>
-                                </div>
-                                
-                                <button class="btn btn-primary mb-3" onclick="loadManagedStudents(this)">Load Students</button>
-                                
-                                <!-- The container for adding/editing students -->
-                                <div id="manage-students-container" class="mt-3" style="display:none;">
-                                    <!-- The rest of this container remains the same -->
-                                    <div class="d-flex align-items-center mb-3 p-3 bg-light rounded">
-                                        <label for="rowsToAddInput" class="form-label me-2 mb-0">Add:</label>
-                                        <input type="number" id="rowsToAddInput" class="form-control" style="width: 100px;" placeholder="e.g., 5">
-                                        <button class="btn btn-secondary ms-2" onclick="addStudentRows()">Add Rows</button>
-                                    </div>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <?!= include('Styles'); ?>
+</head>
+<body>
 
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered">
-                                            <thead>
-                                                <tr>
-                                                <th>Name</th>
-                                                <th>Class</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="manageStudentTableBody"></tbody>
-                                        </table>
-                                    </div>
-                                    <button class="btn btn-success float-end" onclick="saveManagedStudents(this)">Save Students</button>
-                                </div>
-                            </div>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-               <!-- Unauthorized View -->
-               <div id="unauthorizedView" class="view" style="display: none;">
-                  <div class="alert alert-danger">You are not authorized to access this application.</div>
-               </div>
-            </div>
-         </main>
+<!-- Toast Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index:9999"></div>
+
+<div class="d-flex" id="app-wrapper">
+  <!-- Sidebar -->
+  <nav class="sidebar bg-light border-end" id="sidebar">
+    <div class="sidebar-header border-bottom">
+      <a href="#" class="d-flex align-items-center text-decoration-none p-3" onclick="switchView('dashboardView'); return false;">
+        <i class="bi bi-book-half fs-4 me-2 text-primary"></i>
+        <span class="fs-5 fw-semibold">Spoken English</span>
+      </a>
+    </div>
+    <div class="list-group list-group-flush mt-2">
+      <a href="#" class="list-group-item list-group-item-action" onclick="switchView('dashboardView'); return false;" id="nav-dashboard">
+        <i class="bi bi-grid-1x2-fill me-2"></i> Dashboard
+      </a>
+      <a href="#" class="list-group-item list-group-item-action" onclick="loadAssessmentView(); return false;" id="nav-assessment">
+        <i class="bi bi-card-checklist me-2"></i> Assessment
+      </a>
+      <a href="#" class="list-group-item list-group-item-action" onclick="loadManagementView(); return false;" id="nav-manage" style="display:none;">
+        <i class="bi bi-people-fill me-2"></i> Manage
+      </a>
+    </div>
+    <div class="p-3 border-top mt-auto" id="sidebar-user" style="display:none; position:absolute; bottom:0; width:100%;">
+      <small class="text-muted d-block text-truncate" id="sidebarEmail"></small>
+      <span class="badge" id="sidebarRole"></span>
+    </div>
+  </nav>
+
+  <!-- Page Content -->
+  <main class="main-content flex-grow-1">
+    <div class="container-fluid p-4">
+
+      <!-- Loading View -->
+      <div id="loadingView" class="view">
+        <div class="d-flex justify-content-center align-items-center" style="height:80vh;">
+          <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+        </div>
       </div>
-      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-      <script>
-         // --- GLOBAL STATE ---
-         let currentUser = null;
-         let kpiMaster = [];
-         let studentsList = [];
-         
-         // --- INITIALIZATION ---
-         window.addEventListener('load', function() {
-           switchView('loadingView');
-           google.script.run
-             .withSuccessHandler(handleUserAuth)
-             .withFailureHandler(showError)
-             .getUserDetails();
-         });
-         
-         function handleUserAuth(user) {
-           if (!user || user.error) {
-             showError(user.error || 'Could not authenticate.');
-             return;
-           }
-           
-           currentUser = user;
-         
-           if (user.role === 'Unauthorized') {
-             switchView('unauthorizedView');
-           } else if (user.pinRequired) {
-             switchView('pinView');
-           } else {
-             initializeApp(user);
-           }
-         }
-         
-         function initializeApp(user) {
-           document.getElementById('userEmail').textContent = user.email;
-           document.getElementById('userRole').textContent = user.role;
-           setupUIBasedOnRole(user.role);
-           switchView('dashboardView');
-         }
-         
-         // --- UI & NAVIGATION ---
-         
-         function switchView(viewId) {
-           document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
-           const targetView = document.getElementById(viewId);
-           if (targetView) {
-               targetView.style.display = 'block';
-           } else {
-               console.error('View not found: ' + viewId);
-           }
-         }
-         
-         function setupUIBasedOnRole(role) {
-           if (role === 'Admin' || role === 'Supervisor') {
-             document.getElementById('nav-manage').style.display = 'block';
-           }
-           if (role === 'Volunteer') {
-             // Volunteer-specific UI changes if any
-           }
-         }
-         
-         function showError(error) {
-           console.error(error);
-           switchView('unauthorizedView');
-           document.querySelector('#unauthorizedView .alert').textContent = 'An error occurred: ' + (error.message || error);
-         }
-         
-         // --- PIN HANDLING ---
-         
-         function handlePinSubmit() {
-           const pin = document.getElementById('pinInput').value;
-           if (!pin) return;
-           
-           document.getElementById('pinError').style.display = 'none';
-           
-           google.script.run
-             .withSuccessHandler(response => {
-               if (response.success) {
-                 initializeApp(currentUser);
-               } else {
-                 document.getElementById('pinError').style.display = 'block';
-               }
-             })
-             .withFailureHandler(showError)
-             .verifyVolunteerPin(pin);
-         }
-         
-         // --- ASSESSMENT LOGIC ---
-         function loadAssessmentView() {
-           // Clear previous state
-           document.getElementById('student-grid-container').style.display = 'none';
-           document.getElementById('validation-error').style.display = 'none';
-           document.getElementById('schoolSelect').innerHTML = '';
-           document.getElementById('assessmentTypeSelect').value = '';
-         
-           switchView('loadingView');
-           if (currentUser.role === 'Volunteer') {
-              google.script.run
-               .withSuccessHandler(schools => {
-                 const select = document.getElementById('schoolSelect');
-                 select.innerHTML = '<option value="">--Select Your School--</option>';
-                 schools.forEach(s => {
-                   select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
-                 });
-                 switchView('assessmentView');
-               })
-               .withFailureHandler(showError)
-               .getMappedSchoolsForVolunteer(currentUser.email);
-           } else {
-              // TODO: Logic for Admin/Supervisor to see all schools in their region
-              // For now, just show the view as a placeholder
-              alert("Admin/Supervisor assessment view needs to be built. You can see the interface.");
-              switchView('assessmentView');
-           }
-         }
-         
-         async function loadStudentGrid() {
-           const schoolId = document.getElementById('schoolSelect').value;
-           const assessmentType = document.getElementById('assessmentTypeSelect').value;
-           const validationErrorDiv = document.getElementById('validation-error');
-           validationErrorDiv.style.display = 'none';
-           document.getElementById('student-grid-container').style.display = 'none';
-         
-           if (!schoolId || !assessmentType) {
-             validationErrorDiv.textContent = 'Please select a school and an assessment type.';
-             validationErrorDiv.style.display = 'block';
-             return;
-           }
-           
-           const loaderButton = event.target;
-           loaderButton.disabled = true;
-           loaderButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-         
-           // Fetch KPIs and Students in parallel
-           try {
-             const students = await new Promise((resolve, reject) => {
-               google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getStudentsForSchool(schoolId);
-             });
-             
-             if (students.length === 0) {
-                 validationErrorDiv.textContent = 'No students found for this school.';
-                 validationErrorDiv.style.display = 'block';
-                 return;
-             }
-         
-             studentsList = students;
-         
-             // Sequential validation check
-             if (assessmentType === 'Midline' || assessmentType === 'Endline') {
-                 const existingTypes = await new Promise((resolve, reject) => {
-                    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentTypes(students[0].studentId);
-                 });
-         
-                 if(assessmentType === 'Midline' && !existingTypes.includes('Baseline')) {
-                    validationErrorDiv.textContent = 'A "Baseline" assessment must be completed for students in this school before a "Midline" can be entered.';
-                    validationErrorDiv.style.display = 'block';
-                    return;
-                 }
-                 if(assessmentType === 'Endline' && !existingTypes.includes('Midline')) {
-                    validationErrorDiv.textContent = 'A "Midline" assessment must be completed before an "Endline" can be entered.';
-                    validationErrorDiv.style.display = 'block';
-                    return;
-                 }
-             }
-         
-             const kpis = await new Promise((resolve, reject) => {
-                 google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getKpis();
-             });
-             kpiMaster = kpis;
-         
-             renderAssessmentGrid(students, kpis);
-             document.getElementById('student-grid-container').style.display = 'block';
-         
-           } catch(err) {
-               showError(err);
-           } finally {
-               loaderButton.disabled = false;
-               loaderButton.textContent = 'Load Students';
-           }
-         }
-         
-         function renderAssessmentGrid(students, kpis) {
-           const head = document.getElementById('assessment-grid-head');
-           const body = document.getElementById('assessment-grid-body');
-           
-           let headerHtml = '<tr><th>Student Name</th>';
-           kpis.forEach(k => headerHtml += `<th>${k.name}</th>`);
-           headerHtml += '<th>Attendance</th></tr>';
-           head.innerHTML = headerHtml;
-         
-           let bodyHtml = '';
-           students.forEach(student => {
-             bodyHtml += `<tr data-studentid="${student.studentId}">
-               <td>${student.studentName} (${student.class})</td>`;
-             
-             kpis.forEach(kpi => {
-               bodyHtml += `<td><input type="number" class="form-control kpi-score" data-kpiid="${kpi.id}" min="1" max="5" style="width: 70px;"></td>`;
-             });
-             
-             bodyHtml += `<td>
-                 <div class="form-check form-switch">
-                   <input class="form-check-input attendance-toggle" type="checkbox" role="switch" checked onchange="toggleAttendance(this)">
-                   <label class="form-check-label">Present</label>
-                 </div>
-               </td>`;
-             bodyHtml += '</tr>';
-           });
-           body.innerHTML = bodyHtml;
-         }
-         
-         function toggleAttendance(checkbox) {
-           const row = checkbox.closest('tr');
-           const inputs = row.querySelectorAll('.kpi-score');
-           const label = row.querySelector('.form-check-label');
-           if (checkbox.checked) {
-             inputs.forEach(input => input.disabled = false);
-             label.textContent = "Present";
-           } else {
-             inputs.forEach(input => {
-               input.disabled = true;
-               input.value = '';
-             });
-             label.textContent = "Absent";
-           }
-         }
-         
-         function handleSaveAssessments() {
-           const schoolId = document.getElementById('schoolSelect').value;
-           const assessmentType = document.getElementById('assessmentTypeSelect').value;
-         
-           const payload = [];
-           const rows = document.querySelectorAll('#assessment-grid-body tr');
-           
-           rows.forEach(row => {
-             const studentId = row.dataset.studentid;
-             const isPresent = row.querySelector('.attendance-toggle').checked;
-             
-             const assessmentItem = {
-               studentId: studentId,
-               schoolId: schoolId,
-               assessmentType: assessmentType,
-               status: isPresent ? 'Present' : 'Absent',
-               scores: []
-             };
-         
-             if (isPresent) {
-               row.querySelectorAll('.kpi-score').forEach(input => {
-                  if(input.value) { 
-                     assessmentItem.scores.push({
-                       kpiId: input.dataset.kpiid,
-                       score: parseInt(input.value)
-                     });
-                  }
-               });
-             }
-             payload.push(assessmentItem);
-           });
-         
-           if(payload.length === 0) {
-             alert('No data to save.');
-             return;
-           }
-         
-           const saveBtn = event.target;
-           saveBtn.disabled = true;
-           saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
-         
-           google.script.run
-             .withSuccessHandler(response => {
-               alert(response.message);
-               if(response.success){
-                 loadAssessmentView(); // Reset the view cleanly
-               }
-             })
-             .withFailureHandler(err => {
-               alert('Save failed: ' + err.message);
-             })
-             .withFinally(() => {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Save Assessments';
-             })
-             .saveAssessments(payload);
-         }
-         
-         // --- MANAGEMENT VIEW JAVASCRIPT ---
-         
-         // This function is triggered when a user clicks the "Manage" nav link
-         function loadManagementView() {
-         switchView('loadingView');
-         google.script.run
-           .withSuccessHandler(setupManagementUI)
-           .withFailureHandler(showError)
-           .getDataForManagementView();
-         }
-         
-         // This function runs after the data is fetched from the backend
-        function setupManagementUI(data) {
-            const { user, schools, volunteers } = data;
-            
-            // Populate dropdowns for the mapping form
-            const volSelect = document.getElementById('mapVolunteerSelect');
-            const schSelect = document.getElementById('mapSchoolSelect');
-            // ** THIS IS THE NEW ID for the manage students dropdown **
-            const manageSchoolSelect = document.getElementById('manageSchoolSelect');
-            
-            volSelect.innerHTML = '<option value="">-- Select Volunteer --</option>';
-            volunteers.forEach(v => { volSelect.innerHTML += `<option value="${v.email}">${v.name} (${v.email})</option>`; });
-            
-            schSelect.innerHTML = '<option value="">-- Select School --</option>';
-            manageSchoolSelect.innerHTML = '<option value="">-- Select School --</option>';
-            schools.forEach(s => { 
-                const optionHtml = `<option value="${s.id}">${s.name}</option>`;
-                schSelect.innerHTML += optionHtml;
-                manageSchoolSelect.innerHTML += optionHtml;
-            });
 
-            // If user is a Supervisor, pre-fill and disable Region/Chapter fields
-            if (user.role === 'Supervisor') {
-                ['schoolRegion', 'schoolChapter', 'volunteerRegion', 'volunteerChapter'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (id.includes('Region')) el.value = user.assignedRegion;
-                    if (id.includes('Chapter')) el.value = user.assignedChapter;
-                    el.readOnly = true;
-                    el.classList.add('bg-light'); // Visual cue
-                });
-            }
-            
-            document.getElementById('formAddSchool').reset();
-            document.getElementById('formAddVolunteer').reset();
-            document.getElementById('formMapVolunteer').reset();
-            
-            // ** Hide the student container when switching tabs **
-            document.getElementById('manage-students-container').style.display = 'none';
+      <!-- PIN View -->
+      <div id="pinView" class="view" style="display:none;">
+        <div class="row justify-content-center mt-5">
+          <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm">
+              <div class="card-body p-4">
+                <div class="text-center mb-4">
+                  <i class="bi bi-shield-lock-fill fs-1 text-primary"></i>
+                  <h4 class="mt-2">Volunteer Login</h4>
+                  <p class="text-muted small">Enter your 4-digit PIN to continue</p>
+                </div>
+                <input type="password" id="pinInput" class="form-control form-control-lg text-center mb-3" inputmode="numeric" pattern="[0-9]*" placeholder="••••" autocomplete="one-time-code">
+                <div class="d-grid">
+                  <button class="btn btn-primary btn-lg" onclick="handlePinSubmit()">Unlock</button>
+                </div>
+                <div id="pinError" class="alert alert-danger mt-3 text-center py-2" style="display:none;">
+                  <i class="bi bi-exclamation-triangle me-1"></i>Invalid PIN. Please try again.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            // ** NEW: Setup the searchable dropdowns **
-            setupSearchableDropdowns();
+      <!-- Dashboard View -->
+      <div id="dashboardView" class="view" style="display:none;">
+        <div class="d-flex align-items-center mb-4">
+          <div>
+            <h2 class="mb-0">Dashboard</h2>
+            <p class="text-muted mb-0">Welcome back, <strong id="userEmail"></strong></p>
+          </div>
+          <span id="userRole" class="badge bg-primary ms-3 fs-6"></span>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+              <div class="card-body d-flex align-items-center">
+                <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3"><i class="bi bi-building fs-4 text-primary"></i></div>
+                <div><div class="text-muted small">Schools</div><div class="fs-3 fw-bold">--</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+              <div class="card-body d-flex align-items-center">
+                <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3"><i class="bi bi-people fs-4 text-success"></i></div>
+                <div><div class="text-muted small">Students</div><div class="fs-3 fw-bold">--</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+              <div class="card-body d-flex align-items-center">
+                <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3"><i class="bi bi-clipboard-check fs-4 text-warning"></i></div>
+                <div><div class="text-muted small">Assessments</div><div class="fs-3 fw-bold">--</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            switchView('manageView');
-        }
+      <!-- Assessment View -->
+      <div id="assessmentView" class="view" style="display:none;">
+        <h2 class="mb-4">Student Assessment</h2>
+        <div class="card shadow-sm border-0">
+          <div class="card-body">
+            <div class="row g-3" id="assessment-setup">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">School</label>
+                <select id="schoolSelect" class="form-select"></select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Assessment Type</label>
+                <select id="assessmentTypeSelect" class="form-select">
+                  <option value="">--Select Type--</option>
+                  <option value="Baseline">Baseline</option>
+                  <option value="Midline">Midline</option>
+                  <option value="Endline">Endline</option>
+                </select>
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100" onclick="loadStudentGrid()">Load Students</button>
+              </div>
+            </div>
+            <div id="validation-error" class="alert alert-danger mt-3" style="display:none;"></div>
+            <div id="student-grid-container" class="mt-4" style="display:none;">
+              <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle">
+                  <thead class="table-light" id="assessment-grid-head"></thead>
+                  <tbody id="assessment-grid-body"></tbody>
+                </table>
+              </div>
+              <div class="d-flex justify-content-end mt-3">
+                <button class="btn btn-success px-4" onclick="handleSaveAssessments()">
+                  <i class="bi bi-check-circle-fill me-2"></i>Save Assessments
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        function loadManagedStudents(btn) {
-        const schoolId = document.getElementById('manageSchoolSelect').value;
-        if (!schoolId) {
-          alert("Please select a school.");
-          return;
-        }
-        
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+      <!-- Manage View -->
+      <div id="manageView" class="view" style="display:none;">
+        <h2 class="mb-4">Management</h2>
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-white border-bottom">
+            <ul class="nav nav-tabs card-header-tabs" id="manageTabs">
+              <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-add-school" id="tab-btn-school">
+                  <i class="bi bi-building-add me-1"></i>Add School
+                </button>
+              </li>
+              <li class="nav-item" id="nav-tab-volunteer" style="display:none;">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-add-volunteer">
+                  <i class="bi bi-person-plus me-1"></i>Add Volunteer
+                </button>
+              </li>
+              <li class="nav-item" id="nav-tab-map" style="display:none;">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-map-volunteer">
+                  <i class="bi bi-diagram-3 me-1"></i>Map Volunteer
+                </button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students">
+                  <i class="bi bi-person-lines-fill me-1"></i>Manage Students
+                </button>
+              </li>
+            </ul>
+          </div>
+          <div class="card-body">
+            <div class="tab-content">
 
-        google.script.run
-          .withSuccessHandler(students => {
-            // This runs on success
-            document.getElementById('manage-students-container').style.display = 'block';
-            renderManagedStudentGrid(students || []); 
-            
-            // "Finally" logic for success
-            btn.disabled = false;
-            btn.innerHTML = 'Load Students';
-          })
-          .withFailureHandler(err => {
-              // This runs on failure
-              alert('Error loading students: ' + err.message);
-              document.getElementById('manage-students-container').style.display = 'none';
+              <!-- ═══ ADD SCHOOL TAB ═══ -->
+              <div class="tab-pane fade show active" id="tab-add-school">
+                <div class="row g-4">
+                  <!-- Form column -->
+                  <div class="col-lg-5">
+                    <h5 class="mb-3">New School</h5>
+                    <div class="row g-3" id="addSchoolFormFields">
+                      <div class="col-12">
+                        <label class="form-label">School Name <span class="text-danger">*</span></label>
+                        <input type="text" id="schoolName" class="form-control" placeholder="e.g. GHPS Channasandra">
+                      </div>
+                      <div class="col-md-6" id="schoolRegionWrapper">
+                        <label class="form-label">Region <span class="text-danger">*</span></label>
+                        <select id="schoolRegion" class="form-select">
+                          <option value="">--Select Region--</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6" id="schoolChapterWrapper">
+                        <label class="form-label">Chapter <span class="text-danger">*</span></label>
+                        <select id="schoolChapter" class="form-select" disabled>
+                          <option value="">--Select Region first--</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">Taluk</label>
+                        <input type="text" id="schoolTaluk" class="form-control">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">District</label>
+                        <input type="text" id="schoolDistrict" class="form-control">
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label">Total Strength <span class="text-danger">*</span></label>
+                        <input type="number" id="schoolStrength" class="form-control" placeholder="e.g. 120">
+                      </div>
+                    </div>
+                    <button class="btn btn-primary mt-4" onclick="handleAddSchool(this)">
+                      <i class="bi bi-plus-circle me-1"></i>Add School
+                    </button>
+                  </div>
+                  <!-- Table column -->
+                  <div class="col-lg-7">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h5 class="mb-0">Schools Added <span class="badge bg-secondary" id="schoolCountBadge">0</span></h5>
+                    </div>
+                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+                      <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light sticky-top">
+                          <tr><th>Name</th><th>Region</th><th>Chapter</th><th>District</th><th>Strength</th></tr>
+                        </thead>
+                        <tbody id="schoolsTableBody">
+                          <tr><td colspan="5" class="text-center text-muted p-3">No schools loaded yet.</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-              // "Finally" logic for failure
-              btn.disabled = false;
-              btn.innerHTML = 'Load Students';
-          })
-          .getStudentsBySchool(schoolId);
-        }
+              <!-- ═══ ADD VOLUNTEER TAB ═══ -->
+              <div class="tab-pane fade" id="tab-add-volunteer">
+                <div class="row g-4">
+                  <div class="col-lg-5">
+                    <h5 class="mb-3">New Volunteer</h5>
+                    <div class="row g-3">
+                      <div class="col-12">
+                        <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" id="volunteerName" class="form-control" placeholder="e.g. Ravi Kumar">
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" id="volunteerEmail" class="form-control" placeholder="ravi@example.com">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">PIN (4 digits) <span class="text-danger">*</span></label>
+                        <input type="text" id="volunteerPin" class="form-control" placeholder="••••" maxlength="4" pattern="\d{4}">
+                      </div>
+                      <div class="col-md-6" id="volRegionWrapper">
+                        <label class="form-label">Region <span class="text-danger">*</span></label>
+                        <select id="volunteerRegion" class="form-select">
+                          <option value="">--Select Region--</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6" id="volChapterWrapper">
+                        <label class="form-label">Chapter <span class="text-danger">*</span></label>
+                        <select id="volunteerChapter" class="form-select" disabled>
+                          <option value="">--Select Region first--</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button class="btn btn-primary mt-4" onclick="handleAddVolunteer(this)">
+                      <i class="bi bi-plus-circle me-1"></i>Add Volunteer
+                    </button>
+                  </div>
+                  <div class="col-lg-7">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h5 class="mb-0">Volunteers <span class="badge bg-secondary" id="volCountBadge">0</span></h5>
+                    </div>
+                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+                      <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light sticky-top">
+                          <tr><th>Name</th><th>Email</th><th>Region</th><th>Chapter</th></tr>
+                        </thead>
+                        <tbody id="volunteersTableBody">
+                          <tr><td colspan="4" class="text-center text-muted p-3">No volunteers loaded yet.</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-         function resetButton(btn, text) {
-         btn.disabled = false;
-         btn.innerHTML = text;
-         }
+              <!-- ═══ MAP VOLUNTEER TAB ═══ -->
+              <div class="tab-pane fade" id="tab-map-volunteer">
+                <div class="row g-4">
+                  <!-- Mapping form -->
+                  <div class="col-lg-5">
+                    <h5 class="mb-3">Create Mapping</h5>
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold">Volunteer</label>
+                      <input type="text" id="mapVolSearch" class="form-control mb-2" placeholder="Search volunteer...">
+                      <select id="mapVolunteerSelect" class="form-select" size="5"></select>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold">School</label>
+                      <input type="text" id="mapSchSearch" class="form-control mb-2" placeholder="Search school...">
+                      <select id="mapSchoolSelect" class="form-select" size="5"></select>
+                    </div>
+                    <button class="btn btn-primary w-100" onclick="handleMapVolunteer(this)">
+                      <i class="bi bi-link-45deg me-1"></i>Create Mapping
+                    </button>
+                  </div>
+                  <!-- Mappings table -->
+                  <div class="col-lg-7">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h5 class="mb-0">Current Mappings <span class="badge bg-secondary" id="mapCountBadge">0</span></h5>
+                    </div>
+                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+                      <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light sticky-top">
+                          <tr><th>Volunteer</th><th>School</th><th class="text-center">Action</th></tr>
+                        </thead>
+                        <tbody id="mappingsTableBody">
+                          <tr><td colspan="3" class="text-center text-muted p-3">No mappings yet.</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-        function renderManagedStudentGrid(students) {
-        const body = document.getElementById('manageStudentTableBody');
-        body.innerHTML = '';
+              <!-- ═══ MANAGE STUDENTS TAB ═══ -->
+              <div class="tab-pane fade" id="tab-manage-students">
+                <div class="row g-3 mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Select School</label>
+                    <input type="text" id="manageSchSearch" class="form-control mb-2" placeholder="Search school...">
+                    <select id="manageSchoolSelect" class="form-select"></select>
+                  </div>
+                </div>
 
-        if (!students || students.length === 0) {
-          body.innerHTML = `
-            <tr id="no-managed-students-row">
-              <td colspan="2" class="text-center text-muted p-3">
-                No students found. Click "Add Rows" to begin.
-              </td>
-            </tr>
-          `;
-          return;
-        }
+                <div id="manage-students-container" style="display:none;">
+                  <div class="d-flex align-items-center mb-3 p-3 bg-light rounded gap-2">
+                    <label class="form-label mb-0 me-1">Add rows:</label>
+                    <input type="number" id="rowsToAddInput" class="form-control" style="width:90px;" placeholder="e.g. 5" min="1">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="addStudentRows()">
+                      <i class="bi bi-plus-lg me-1"></i>Add Rows
+                    </button>
+                    <button class="btn btn-success ms-auto" onclick="saveManagedStudents(this)">
+                      <i class="bi bi-floppy me-1"></i>Save Students
+                    </button>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-bordered align-middle">
+                      <thead class="table-light">
+                        <tr><th style="width:55%">Student Name</th><th>Class</th></tr>
+                      </thead>
+                      <tbody id="manageStudentTableBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
 
-        students.forEach(s => {
-          body.innerHTML += `
-            <tr data-id="${s.studentId}">
-              <td><input class="form-control student-name" value="${s.studentName}"></td>
-              <td><input class="form-control student-class" value="${s.class}"></td>
-            </tr>
-          `;
-        });
+            </div><!-- /tab-content -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Unauthorized View -->
+      <div id="unauthorizedView" class="view" style="display:none;">
+        <div class="alert alert-danger d-flex align-items-center">
+          <i class="bi bi-shield-exclamation fs-4 me-3"></i>
+          <div>You are not authorized to access this application. Please contact your administrator.</div>
+        </div>
+      </div>
+
+    </div><!-- /container -->
+  </main>
+</div><!-- /app-wrapper -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+//  GLOBAL STATE
+// ═══════════════════════════════════════════════════════════
+let currentUser = null;
+let kpiMaster = [];
+let studentsList = [];
+let geoData = { regions: [], chapters: {} };
+let mgmtData = { schools: [], volunteers: [], mappings: [] };
+
+// ═══════════════════════════════════════════════════════════
+//  TOAST NOTIFICATION SYSTEM (replaces all alert() calls)
+// ═══════════════════════════════════════════════════════════
+function showToast(message, type = 'success', duration = 4000) {
+  const icons = { success: 'bi-check-circle-fill', danger: 'bi-x-circle-fill', warning: 'bi-exclamation-triangle-fill', info: 'bi-info-circle-fill' };
+  const colors = { success: 'text-success', danger: 'text-danger', warning: 'text-warning', info: 'text-primary' };
+  const id = 'toast-' + Date.now();
+  const html = `
+    <div id="${id}" class="toast align-items-center border-0 shadow" role="alert" aria-live="assertive" data-bs-autohide="true" data-bs-delay="${duration}">
+      <div class="d-flex">
+        <div class="toast-body d-flex align-items-center gap-2">
+          <i class="bi ${icons[type] || icons.info} ${colors[type] || colors.info} fs-5"></i>
+          <span>${message}</span>
+        </div>
+        <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    </div>`;
+  document.getElementById('toastContainer').insertAdjacentHTML('beforeend', html);
+  const toastEl = document.getElementById(id);
+  const toast = new bootstrap.Toast(toastEl);
+  toast.show();
+  toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INIT & AUTH
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('load', function() {
+  switchView('loadingView');
+  google.script.run.withSuccessHandler(handleUserAuth).withFailureHandler(showError).getUserDetails();
+});
+
+function handleUserAuth(user) {
+  if (!user || user.error) { showError(user ? user.error : 'Authentication failed.'); return; }
+  currentUser = user;
+  if (user.role === 'Unauthorized') { switchView('unauthorizedView'); return; }
+  if (user.pinRequired) { switchView('pinView'); return; }
+  initializeApp(user);
+}
+
+function initializeApp(user) {
+  document.getElementById('userEmail').textContent = user.email;
+  document.getElementById('userRole').textContent = user.role;
+  document.getElementById('sidebarEmail').textContent = user.email;
+  document.getElementById('sidebarRole').textContent = user.role;
+  document.getElementById('sidebarRole').className = 'badge ' + (user.role === 'Admin' ? 'bg-danger' : user.role === 'Supervisor' ? 'bg-warning text-dark' : 'bg-success');
+  document.getElementById('sidebar-user').style.display = 'block';
+  setupUIBasedOnRole(user.role);
+  switchView('dashboardView');
+}
+
+function setupUIBasedOnRole(role) {
+  const canManage = role === 'Admin' || role === 'Supervisor' || role === 'Volunteer';
+  if (canManage) document.getElementById('nav-manage').style.display = 'block';
+}
+
+function switchView(viewId) {
+  document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+  const t = document.getElementById(viewId);
+  if (t) t.style.display = 'block';
+}
+
+function showError(error) {
+  const msg = (error && error.message) ? error.message : (error || 'An unknown error occurred.');
+  switchView('unauthorizedView');
+  document.querySelector('#unauthorizedView .alert div').textContent = 'An error occurred: ' + msg;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PIN
+// ═══════════════════════════════════════════════════════════
+function handlePinSubmit() {
+  const pin = document.getElementById('pinInput').value;
+  if (!pin) return;
+  document.getElementById('pinError').style.display = 'none';
+  google.script.run
+    .withSuccessHandler(response => {
+      if (response.success) {
+        if (response.assignedRegion) { currentUser.assignedRegion = response.assignedRegion; currentUser.assignedChapter = response.assignedChapter; }
+        initializeApp(currentUser);
+      } else {
+        document.getElementById('pinError').style.display = 'block';
       }
-              
-         // Form submission handlers
-         function handleAddSchool(event) {
-         event.preventDefault();
-         const btn = event.target.querySelector('button[type="submit"]');
-         btn.disabled = true;
-         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-         
-         const schoolData = {
-           name: document.getElementById('schoolName').value,
-           region: document.getElementById('schoolRegion').value,
-           chapter: document.getElementById('schoolChapter').value,
-           taluk: document.getElementById('schoolTaluk').value,
-           district: document.getElementById('schoolDistrict').value,
-           strength: document.getElementById('schoolStrength').value,
-         };
-         
-         google.script.run
-         .withSuccessHandler(response => {
-         alert(response.message);
-         if(response.success) loadManagementView();
-         resetButton(btn, 'Add School');
-         })
-         .withFailureHandler(err => {
-         alert('Error: ' + err.message);
-         resetButton(btn, 'Add School');
-         })
-         .addSchool(schoolData)
-         }
-         
-         function handleAddVolunteer(event) {
-         event.preventDefault();
-         const btn = event.target.querySelector('button[type="submit"]');
-         btn.disabled = true;
-         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-         
-         const volunteerData = {
-           name: document.getElementById('volunteerName').value,
-           email: document.getElementById('volunteerEmail').value,
-           pin: document.getElementById('volunteerPin').value,
-           region: document.getElementById('volunteerRegion').value,
-           chapter: document.getElementById('volunteerChapter').value,
-         };
-         
-         google.script.run
-         .withSuccessHandler(response => {
-         alert(response.message);
-         if(response.success) loadManagementView();
-         resetButton(btn, 'Add Volunteer');
-         })
-         .withFailureHandler(err => {
-         alert('Error: ' + err.message);
-         resetButton(btn, 'Add Volunteer');
-         })
-         .addVolunteer(volunteerData)
-         }
-         
-         function handleMapVolunteer(event) {
-         event.preventDefault();
-         const btn = event.target.querySelector('button[type="submit"]');
-         btn.disabled = true;
-         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-         
-         const mappingData = {
-           volunteerEmail: document.getElementById('mapVolunteerSelect').value,
-           schoolId: document.getElementById('mapSchoolSelect').value,
-         };
-         
-         google.script.run
-         .withSuccessHandler(response => {
-         alert(response.message);
-         if(response.success) loadManagementView();
-         resetButton(btn, 'Create Mapping');
-         })
-         .withFailureHandler(err => {
-         alert('Error: ' + err.message);
-         resetButton(btn, 'Create Mapping');
-         })
-         .mapVolunteerToSchool(mappingData)
-         }
-         
-         function loadStudents() {
-         const schoolId = document.getElementById('studentSchoolSelect').value;
-         if (!schoolId) {
-         alert("Please select a school.");
-         return;
-         }
-         
-         const loadBtn = event.target;
-         loadBtn.disabled = true;
-         loadBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
-         
-         google.script.run
-         .withSuccessHandler(students => {
-           // This runs only on success
-           document.getElementById('student-grid-container').style.display = 'block';
-           renderStudentGrid(students || []); 
-           
-           // Final logic for success case
-           loadBtn.disabled = false;
-           loadBtn.innerHTML = 'Load Students';
-         })
-         .withFailureHandler(err => {
-             // This runs only on failure
-             alert('Error loading students: ' + err.message);
-             document.getElementById('student-grid-container').style.display = 'none';
-             
-             // Final logic for failure case
-             loadBtn.disabled = false;
-             loadBtn.innerHTML = 'Load Students';
-         })
-         .getStudentsBySchool(schoolId);
-         }
-         
-         function renderStudentGrid(students) {
-         const body = document.getElementById('studentTableBody');
-         body.innerHTML = ''; // Clear previous results
-         
-         if (!students || students.length === 0) {
-         // Display a helpful placeholder row
-         body.innerHTML = `
-         <tr id="no-students-row">
-           <td colspan="2" class="text-center text-muted p-3">
-             No students found for this school. Click "Add Rows" to begin.
-           </td>
-         </tr>
-         `;
-         return;
-         }
-         
-         let rowsHtml = '';
-         students.forEach(s => {
-         // Use data attributes for all student properties
-         rowsHtml += `
-         <tr data-id="${s.studentId}">
-           <td><input class="form-control student-name" value="${s.studentName}"></td>
-           <td><input class="form-control student-class" value="${s.class}"></td>
-         </tr>
-         `;
-         });
-         body.innerHTML = rowsHtml;
-         }
-         
-         
-        function addStudentRows() {
-          const countInput = document.getElementById('rowsToAddInput');
-          const count = parseInt(countInput.value, 10);
-          if (!count || count <= 0) {
-            alert("Please enter a valid number of rows to add.");
-            return;
-          }
+    })
+    .withFailureHandler(err => showToast(err.message, 'danger'))
+    .verifyVolunteerPin(pin);
+}
 
-          const body = document.getElementById('manageStudentTableBody');
-          const placeholderRow = document.getElementById('no-managed-students-row');
-          if (placeholderRow) placeholderRow.remove();
+// ═══════════════════════════════════════════════════════════
+//  ASSESSMENT
+// ═══════════════════════════════════════════════════════════
+function loadAssessmentView() {
+  document.getElementById('student-grid-container').style.display = 'none';
+  document.getElementById('validation-error').style.display = 'none';
+  document.getElementById('schoolSelect').innerHTML = '';
+  document.getElementById('assessmentTypeSelect').value = '';
+  switchView('loadingView');
 
-          for (let i = 0; i < count; i++) {
-            body.innerHTML += `
-              <tr data-id="">
-                <td><input class="form-control student-name"></td>
-                <td><input class="form-control student-class"></td>
-              </tr>
-            `;
-          }
-          countInput.value = '';
-        }
+  if (currentUser.role === 'Volunteer') {
+    google.script.run
+      .withSuccessHandler(schools => {
+        const sel = document.getElementById('schoolSelect');
+        sel.innerHTML = '<option value="">--Select School--</option>';
+        schools.forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
+        switchView('assessmentView');
+      })
+      .withFailureHandler(showError)
+      .getMappedSchoolsForVolunteer(currentUser.email);
+  } else {
+    // Admin/Supervisor: show all scoped schools via management data
+    google.script.run
+      .withSuccessHandler(data => {
+        const sel = document.getElementById('schoolSelect');
+        sel.innerHTML = '<option value="">--Select School--</option>';
+        (data.schools || []).forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
+        switchView('assessmentView');
+      })
+      .withFailureHandler(showError)
+      .getDataForManagementView();
+  }
+}
 
-        function saveManagedStudents(btn) {
-        const schoolId = document.getElementById('manageSchoolSelect').value;
-        const rows = document.querySelectorAll('#manageStudentTableBody tr');
-        const studentsToSave = [];
+async function loadStudentGrid() {
+  const schoolId = document.getElementById('schoolSelect').value;
+  const assessmentType = document.getElementById('assessmentTypeSelect').value;
+  const errDiv = document.getElementById('validation-error');
+  errDiv.style.display = 'none';
+  document.getElementById('student-grid-container').style.display = 'none';
 
-        rows.forEach(row => {
-          if (row.id === 'no-managed-students-row') return;
-          const studentName = row.querySelector('.student-name').value.trim();
-          if (studentName) {
-            studentsToSave.push({
-              studentId: row.dataset.id,
-              studentName: studentName,
-              class: row.querySelector('.student-class').value.trim()
-            });
-          }
-        });
+  if (!schoolId || !assessmentType) {
+    errDiv.textContent = 'Please select a school and an assessment type.';
+    errDiv.style.display = 'block';
+    return;
+  }
 
-        if (studentsToSave.length === 0) {
-          alert("No student data to save.");
-          return;
-        }
-        
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
-        google.script.run
-          .withSuccessHandler(response => {
-            // This runs on success
-            alert(response.message);
-            if (response.success) {
-              const loadButton = document.querySelector('#manage-students button[onclick^="loadManagedStudents"]');
-              if (loadButton) loadButton.click();
-            }
+  try {
+    const students = await gsRun('getStudentsForSchool', schoolId);
+    if (!students.length) {
+      errDiv.textContent = 'No students found for this school.';
+      errDiv.style.display = 'block';
+      return;
+    }
+    studentsList = students;
 
-            // "Finally" logic for success
-            btn.disabled = false;
-            btn.innerHTML = 'Save Students';
-          })
-          .withFailureHandler(err => {
-            // This runs on failure
-            alert('Save failed: ' + err.message);
-
-            // "Finally" logic for failure
-            btn.disabled = false;
-            btn.innerHTML = 'Save Students';
-          })
-          .saveOrUpdateStudents(studentsToSave, schoolId);
+    if (assessmentType === 'Midline' || assessmentType === 'Endline') {
+      const existingTypes = await gsRun('getExistingAssessmentTypes', students[0].studentId);
+      if (assessmentType === 'Midline' && !existingTypes.includes('Baseline')) {
+        errDiv.textContent = 'A Baseline assessment must be completed before a Midline can be entered.';
+        errDiv.style.display = 'block';
+        return;
       }
-
-
-         function saveStudents() {
-         const schoolId = document.getElementById('studentSchoolSelect').value;
-         if (!schoolId) {
-         alert("No school selected.");
-         return;
-         }
-         
-         const saveBtn = event.target;
-         const rows = document.querySelectorAll('#studentTableBody tr');
-         const studentsToSave = [];
-         
-         rows.forEach(row => {
-         if (row.id === 'no-students-row') return;
-         
-         const studentName = row.querySelector('.student-name').value.trim();
-         const studentClass = row.querySelector('.student-class').value.trim();
-         const studentId = row.dataset.id; 
-         
-         if (studentName) {
-         studentsToSave.push({
-           studentId: studentId,
-           studentName: studentName,
-           class: studentClass
-         });
-         }
-         });
-         
-         if (studentsToSave.length === 0) {
-         alert("No student data to save. Please enter student names.");
-         return;
-         }
-         
-         saveBtn.disabled = true;
-         saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-         
-         google.script.run
-         .withSuccessHandler(response => {
-         // Runs on success
-         alert(response.message);
-         if (response.success) {
-           // Reload the students to get the new IDs and a clean state
-           // NOTE: We need to find the "Load Students" button to pass to the function
-           const loadStudentsButton = document.querySelector('#manage-students button[onclick="loadStudents()"]');
-           if(loadStudentsButton) loadStudentsButton.click();
-         }
-         
-         // Final logic for success case
-         saveBtn.disabled = false;
-         saveBtn.innerHTML = 'Save Students';
-         })
-         .withFailureHandler(err => {
-         // Runs on failure
-         alert('Save failed: ' + err.message);
-         
-         // Final logic for failure case
-         saveBtn.disabled = false;
-         saveBtn.innerHTML = 'Save Students';
-         })
-         .saveOrUpdateStudents(studentsToSave, schoolId);
-         }
-         
-         function setupSearchableDropdowns() {
-        // Find all the search input fields
-        document.querySelectorAll('.searchable-dropdown').forEach(input => {
-          // Store original options on the select element itself for easy reset
-          const selectEl = document.getElementById(input.dataset.targetSelect);
-          if (!selectEl.originalOptions) {
-              selectEl.originalOptions = Array.from(selectEl.options);
-          }
-
-          // Add an event listener to the search input
-          input.addEventListener('keyup', () => {
-              const searchTerm = input.value.toLowerCase();
-              
-              // Clear current options
-              selectEl.innerHTML = ''; 
-
-              // Filter and add back the matching options
-              selectEl.originalOptions.forEach(option => {
-                  if (option.text.toLowerCase().includes(searchTerm)) {
-                      selectEl.add(option);
-                  }
-              });
-          });
-        });
+      if (assessmentType === 'Endline' && !existingTypes.includes('Midline')) {
+        errDiv.textContent = 'A Midline assessment must be completed before an Endline can be entered.';
+        errDiv.style.display = 'block';
+        return;
       }
-      </script>
-   </body>
+    }
+
+    const kpis = await gsRun('getKpis');
+    kpiMaster = kpis;
+    renderAssessmentGrid(students, kpis);
+    document.getElementById('student-grid-container').style.display = 'block';
+  } catch(err) {
+    showToast(err.message || 'Failed to load students.', 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load Students';
+  }
+}
+
+function renderAssessmentGrid(students, kpis) {
+  const head = document.getElementById('assessment-grid-head');
+  const body = document.getElementById('assessment-grid-body');
+  let hHtml = '<tr><th>Student</th>';
+  kpis.forEach(k => hHtml += `<th class="text-center">${k.name}</th>`);
+  hHtml += '<th class="text-center">Attendance</th></tr>';
+  head.innerHTML = hHtml;
+
+  let bHtml = '';
+  students.forEach(s => {
+    bHtml += `<tr data-studentid="${s.studentId}"><td>${s.studentName} <small class="text-muted">(Cls ${s.class})</small></td>`;
+    kpis.forEach(k => {
+      bHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${k.id}" min="1" max="5" style="width:65px;margin:auto;"></td>`;
+    });
+    bHtml += `<td class="text-center">
+      <div class="form-check form-switch d-flex justify-content-center">
+        <input class="form-check-input attendance-toggle" type="checkbox" role="switch" checked onchange="toggleAttendance(this)" style="width:2.5em;height:1.3em;">
+      </div>
+      <small class="attendance-label text-success fw-semibold">Present</small>
+    </td></tr>`;
+  });
+  body.innerHTML = bHtml;
+}
+
+function toggleAttendance(checkbox) {
+  const row = checkbox.closest('tr');
+  row.querySelectorAll('.kpi-score').forEach(inp => { inp.disabled = !checkbox.checked; if (!checkbox.checked) inp.value = ''; });
+  row.querySelector('.attendance-label').textContent = checkbox.checked ? 'Present' : 'Absent';
+  row.querySelector('.attendance-label').className = 'attendance-label fw-semibold ' + (checkbox.checked ? 'text-success' : 'text-danger');
+}
+
+function handleSaveAssessments() {
+  const schoolId = document.getElementById('schoolSelect').value;
+  const assessmentType = document.getElementById('assessmentTypeSelect').value;
+  const payload = [];
+
+  document.querySelectorAll('#assessment-grid-body tr').forEach(row => {
+    const isPresent = row.querySelector('.attendance-toggle').checked;
+    const item = { studentId: row.dataset.studentid, schoolId, assessmentType, status: isPresent ? 'Present' : 'Absent', scores: [] };
+    if (isPresent) {
+      row.querySelectorAll('.kpi-score').forEach(inp => {
+        if (inp.value) item.scores.push({ kpiId: inp.dataset.kpiid, score: parseInt(inp.value) });
+      });
+    }
+    payload.push(item);
+  });
+
+  if (!payload.length) { showToast('No data to save.', 'warning'); return; }
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.message, res.success ? 'success' : 'danger');
+      if (res.success) loadAssessmentView();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Save Assessments';
+    })
+    .withFailureHandler(err => {
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Save Assessments';
+    })
+    .saveAssessments(payload);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MANAGEMENT
+// ═══════════════════════════════════════════════════════════
+function loadManagementView() {
+  switchView('loadingView');
+  google.script.run
+    .withSuccessHandler(setupManagementUI)
+    .withFailureHandler(showError)
+    .getDataForManagementView();
+}
+
+function setupManagementUI(data) {
+  const { user, schools, volunteers, mappings, geoData: geo } = data;
+  mgmtData = { schools, volunteers, mappings };
+  geoData = geo;
+
+  // Show/hide tabs based on role
+  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor';
+  document.getElementById('nav-tab-volunteer').style.display = canManageVols ? '' : 'none';
+  document.getElementById('nav-tab-map').style.display = canManageVols ? '' : 'none';
+
+  // Setup geo dropdowns
+  setupGeoDropdowns(geo, user);
+
+  // Setup searchable selects for mapping
+  setupLiveSearch('mapVolSearch', 'mapVolunteerSelect');
+  setupLiveSearch('mapSchSearch', 'mapSchoolSelect');
+  setupLiveSearch('manageSchSearch', 'manageSchoolSelect');
+
+  // Populate mapping selects
+  const volSel = document.getElementById('mapVolunteerSelect');
+  volSel.innerHTML = '';
+  volunteers.forEach(v => volSel.innerHTML += `<option value="${v.email}">${v.name} (${v.email})</option>`);
+
+  const schSel = document.getElementById('mapSchoolSelect');
+  schSel.innerHTML = '';
+  const manageSel = document.getElementById('manageSchoolSelect');
+  manageSel.innerHTML = '<option value="">-- Select School --</option>';
+  schools.forEach(s => {
+    schSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+    manageSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+  });
+
+  // Render all tables
+  renderSchoolsTable(schools);
+  renderVolunteersTable(volunteers);
+  renderMappingsTable(mappings);
+
+  // Auto-load students when school selected
+  document.getElementById('manageSchoolSelect').onchange = function() {
+    if (this.value) loadManagedStudents();
+    else { document.getElementById('manage-students-container').style.display = 'none'; }
+  };
+
+  // Reset student container
+  document.getElementById('manage-students-container').style.display = 'none';
+
+  switchView('manageView');
+}
+
+function setupGeoDropdowns(geo, user) {
+  const isAdmin = user.role === 'Admin';
+
+  // School dropdowns
+  const schRegion = document.getElementById('schoolRegion');
+  const schChapter = document.getElementById('schoolChapter');
+  // Volunteer dropdowns
+  const volRegion = document.getElementById('volunteerRegion');
+  const volChapter = document.getElementById('volunteerChapter');
+
+  if (!isAdmin) {
+    // Lock region/chapter for non-admin
+    schRegion.innerHTML = `<option value="${user.assignedRegion}">${user.assignedRegion}</option>`;
+    schRegion.disabled = true;
+    schChapter.innerHTML = `<option value="${user.assignedChapter}">${user.assignedChapter}</option>`;
+    schChapter.disabled = true;
+    volRegion.innerHTML = `<option value="${user.assignedRegion}">${user.assignedRegion}</option>`;
+    volRegion.disabled = true;
+    volChapter.innerHTML = `<option value="${user.assignedChapter}">${user.assignedChapter}</option>`;
+    volChapter.disabled = true;
+  } else {
+    // Populate from geoData
+    function populateRegion(sel, chapSel) {
+      sel.innerHTML = '<option value="">--Select Region--</option>';
+      geo.regions.forEach(r => sel.innerHTML += `<option value="${r}">${r}</option>`);
+      sel.onchange = function() {
+        chapSel.innerHTML = '<option value="">--Select Chapter--</option>';
+        chapSel.disabled = !this.value;
+        if (this.value && geo.chapters[this.value]) {
+          geo.chapters[this.value].forEach(c => chapSel.innerHTML += `<option value="${c}">${c}</option>`);
+        }
+      };
+    }
+    populateRegion(schRegion, schChapter);
+    populateRegion(volRegion, volChapter);
+    schChapter.disabled = true;
+    volChapter.disabled = true;
+  }
+}
+
+// ─── Schools Table ─────────────────────────────────────────
+function renderSchoolsTable(schools) {
+  const body = document.getElementById('schoolsTableBody');
+  document.getElementById('schoolCountBadge').textContent = schools.length;
+  if (!schools.length) {
+    body.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-3">No schools yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = schools.map(s => `
+    <tr>
+      <td>${s.name}</td>
+      <td><span class="badge bg-light text-dark border">${s.region || ''}</span></td>
+      <td>${s.chapter || ''}</td>
+      <td>${s.district || ''}</td>
+      <td class="text-center">${s.strength || ''}</td>
+    </tr>`).join('');
+}
+
+function handleAddSchool(btn) {
+  const name = document.getElementById('schoolName').value.trim();
+  const region = document.getElementById('schoolRegion').value;
+  const chapter = document.getElementById('schoolChapter').value;
+  const strength = document.getElementById('schoolStrength').value;
+
+  if (!name || !region || !chapter || !strength) {
+    showToast('Please fill in all required fields.', 'warning');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
+
+  const schoolData = {
+    name, region, chapter,
+    taluk: document.getElementById('schoolTaluk').value.trim(),
+    district: document.getElementById('schoolDistrict').value.trim(),
+    strength: parseInt(strength)
+  };
+
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success) {
+        showToast(res.message, 'success');
+        mgmtData.schools.push(res.school);
+        renderSchoolsTable(mgmtData.schools);
+        // Refresh mapping/manage selects too
+        refreshSchoolSelects();
+        // Clear form
+        ['schoolName','schoolTaluk','schoolDistrict','schoolStrength'].forEach(id => document.getElementById(id).value = '');
+        if (!document.getElementById('schoolRegion').disabled) {
+          document.getElementById('schoolRegion').value = '';
+          document.getElementById('schoolChapter').innerHTML = '<option value="">--Select Region first--</option>';
+          document.getElementById('schoolChapter').disabled = true;
+        }
+      } else {
+        showToast(res.message, 'danger');
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add School';
+    })
+    .withFailureHandler(err => {
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add School';
+    })
+    .addSchool(schoolData);
+}
+
+function refreshSchoolSelects() {
+  const schools = mgmtData.schools;
+  const schSel = document.getElementById('mapSchoolSelect');
+  const manageSel = document.getElementById('manageSchoolSelect');
+  schSel.innerHTML = '';
+  manageSel.innerHTML = '<option value="">-- Select School --</option>';
+  schools.forEach(s => {
+    schSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+    manageSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+  });
+}
+
+// ─── Volunteers Table ──────────────────────────────────────
+function renderVolunteersTable(volunteers) {
+  const body = document.getElementById('volunteersTableBody');
+  document.getElementById('volCountBadge').textContent = volunteers.length;
+  if (!volunteers.length) {
+    body.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-3">No volunteers yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = volunteers.map(v => `
+    <tr>
+      <td>${v.name}</td>
+      <td><small class="text-muted">${v.email}</small></td>
+      <td><span class="badge bg-light text-dark border">${v.region || ''}</span></td>
+      <td>${v.chapter || ''}</td>
+    </tr>`).join('');
+}
+
+function handleAddVolunteer(btn) {
+  const name = document.getElementById('volunteerName').value.trim();
+  const email = document.getElementById('volunteerEmail').value.trim();
+  const pin = document.getElementById('volunteerPin').value.trim();
+  const region = document.getElementById('volunteerRegion').value;
+  const chapter = document.getElementById('volunteerChapter').value;
+
+  if (!name || !email || !pin || !region || !chapter) {
+    showToast('Please fill in all required fields.', 'warning');
+    return;
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    showToast('PIN must be exactly 4 digits.', 'warning');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success) {
+        showToast(res.message, 'success');
+        mgmtData.volunteers.push(res.volunteer);
+        renderVolunteersTable(mgmtData.volunteers);
+        // Refresh volunteer select in mapping tab
+        const volSel = document.getElementById('mapVolunteerSelect');
+        volSel.innerHTML += `<option value="${res.volunteer.email}">${res.volunteer.name} (${res.volunteer.email})</option>`;
+        ['volunteerName','volunteerEmail','volunteerPin'].forEach(id => document.getElementById(id).value = '');
+        if (!document.getElementById('volunteerRegion').disabled) {
+          document.getElementById('volunteerRegion').value = '';
+          document.getElementById('volunteerChapter').innerHTML = '<option value="">--Select Region first--</option>';
+          document.getElementById('volunteerChapter').disabled = true;
+        }
+      } else {
+        showToast(res.message, 'danger');
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
+    })
+    .withFailureHandler(err => {
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
+    })
+    .addVolunteer({ name, email, pin, region, chapter });
+}
+
+// ─── Mappings Table ────────────────────────────────────────
+function renderMappingsTable(mappings) {
+  const body = document.getElementById('mappingsTableBody');
+  document.getElementById('mapCountBadge').textContent = mappings.length;
+  if (!mappings.length) {
+    body.innerHTML = '<tr><td colspan="3" class="text-center text-muted p-3">No mappings yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = mappings.map(m => `
+    <tr id="map-row-${m.mappingId}">
+      <td>
+        <div class="fw-semibold">${m.volunteerName}</div>
+        <small class="text-muted">${m.volunteerEmail}</small>
+      </td>
+      <td>${m.schoolName}</td>
+      <td class="text-center">
+        <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteMapping('${m.mappingId}', this)" title="Remove mapping">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+function handleMapVolunteer(btn) {
+  const volunteerEmail = document.getElementById('mapVolunteerSelect').value;
+  const schoolId = document.getElementById('mapSchoolSelect').value;
+  if (!volunteerEmail || !schoolId) { showToast('Please select both a volunteer and a school.', 'warning'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Mapping...';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success) {
+        showToast(res.message, 'success');
+        mgmtData.mappings.push(res.mapping);
+        renderMappingsTable(mgmtData.mappings);
+      } else {
+        showToast(res.message, 'warning');
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Create Mapping';
+    })
+    .withFailureHandler(err => {
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Create Mapping';
+    })
+    .mapVolunteerToSchool({ volunteerEmail, schoolId });
+}
+
+function handleDeleteMapping(mappingId, btn) {
+  if (!confirm('Remove this mapping?')) return;
+  btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success) {
+        document.getElementById('map-row-' + mappingId).remove();
+        mgmtData.mappings = mgmtData.mappings.filter(m => m.mappingId !== mappingId);
+        document.getElementById('mapCountBadge').textContent = mgmtData.mappings.length;
+        showToast('Mapping removed.', 'success');
+      } else {
+        showToast(res.message, 'danger');
+        btn.disabled = false;
+      }
+    })
+    .withFailureHandler(err => { showToast(err.message, 'danger'); btn.disabled = false; })
+    .deleteMapping(mappingId);
+}
+
+// ─── Students ──────────────────────────────────────────────
+function loadManagedStudents() {
+  const schoolId = document.getElementById('manageSchoolSelect').value;
+  if (!schoolId) return;
+
+  google.script.run
+    .withSuccessHandler(students => {
+      document.getElementById('manage-students-container').style.display = 'block';
+      renderManagedStudentGrid(students || []);
+    })
+    .withFailureHandler(err => {
+      showToast('Error loading students: ' + err.message, 'danger');
+      document.getElementById('manage-students-container').style.display = 'none';
+    })
+    .getStudentsBySchool(schoolId);
+}
+
+function renderManagedStudentGrid(students) {
+  const body = document.getElementById('manageStudentTableBody');
+  body.innerHTML = '';
+  if (!students.length) {
+    body.innerHTML = `<tr id="no-managed-students-row"><td colspan="2" class="text-center text-muted p-3">No students found. Use "Add Rows" to begin.</td></tr>`;
+    return;
+  }
+  students.forEach(s => {
+    body.innerHTML += `<tr data-id="${s.studentId}">
+      <td><input class="form-control form-control-sm student-name" value="${escHtml(s.studentName)}"></td>
+      <td><input class="form-control form-control-sm student-class" value="${escHtml(s.class || '')}"></td>
+    </tr>`;
+  });
+}
+
+function addStudentRows() {
+  const countInput = document.getElementById('rowsToAddInput');
+  const count = parseInt(countInput.value, 10);
+  if (!count || count <= 0) { showToast('Please enter a valid number of rows.', 'warning'); return; }
+  const body = document.getElementById('manageStudentTableBody');
+  const placeholder = document.getElementById('no-managed-students-row');
+  if (placeholder) placeholder.remove();
+  for (let i = 0; i < count; i++) {
+    body.innerHTML += `<tr data-id=""><td><input class="form-control form-control-sm student-name" placeholder="Student name"></td><td><input class="form-control form-control-sm student-class" placeholder="e.g. 7"></td></tr>`;
+  }
+  countInput.value = '';
+}
+
+function saveManagedStudents(btn) {
+  const schoolId = document.getElementById('manageSchoolSelect').value;
+  const rows = document.querySelectorAll('#manageStudentTableBody tr');
+  const toSave = [];
+
+  rows.forEach(row => {
+    if (row.id === 'no-managed-students-row') return;
+    const name = row.querySelector('.student-name').value.trim();
+    if (name) toSave.push({ studentId: row.dataset.id, studentName: name, class: row.querySelector('.student-class').value.trim() });
+  });
+
+  if (!toSave.length) { showToast('No student data to save.', 'warning'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.message, res.success ? 'success' : 'danger');
+      if (res.success) loadManagedStudents();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save Students';
+    })
+    .withFailureHandler(err => {
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save Students';
+    })
+    .saveOrUpdateStudents(toSave, schoolId);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════════════
+
+// Live search filter for a <select> based on a search <input>
+function setupLiveSearch(searchId, selectId) {
+  const input = document.getElementById(searchId);
+  const select = document.getElementById(selectId);
+  if (!input || !select) return;
+  input.addEventListener('input', () => {
+    const term = input.value.toLowerCase();
+    Array.from(select.options).forEach(opt => {
+      opt.hidden = !opt.text.toLowerCase().includes(term);
+    });
+  });
+}
+
+// Wrap google.script.run in a Promise for async/await
+function gsRun(fnName, ...args) {
+  return new Promise((resolve, reject) => {
+    let runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+    runner[fnName](...args);
+  });
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
 </html>
