@@ -1,0 +1,83 @@
+<style>
+  :root {
+    --sidebar-width: 280px;
+    --yfs-primary: #0d6efd; /* A professional blue */
+    --yfs-secondary: #198754; /* A positive green */
+  }
+
+  body {
+    background-color: #f8f9fa;
+  }
+  
+  #app-wrapper {
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    width: var(--sidebar-width);
+    min-height: 100vh;
+    transition: margin-left 0.3s ease-in-out;
+  }
+  
+  .sidebar .sidebar-header {
+    min-height: 60px; /* Align with potential topbar */
+  }
+
+  .sidebar .list-group-item {
+    border: 0;
+    border-radius: 0;
+    padding: 1rem 1.5rem;
+  }
+  
+  .sidebar .list-group-item:hover,
+  .sidebar .list-group-item.active {
+    background-color: #e9ecef;
+    color: var(--yfs-primary);
+  }
+
+  .main-content {
+    transition: margin-left 0.3s ease-in-out;
+    width: calc(100% - var(--sidebar-width));
+  }
+  
+  .card {
+    border: none;
+  }
+
+  /* Mobile Responsive Styles */
+  @media (max-width: 768px) {
+    .sidebar {
+      margin-left: calc(-1 * var(--sidebar-width));
+    }
+    .main-content {
+      width: 100%;
+      margin-left: 0;
+    }
+    
+    /* Add a toggle button if needed in the future */
+    .sidebar.active {
+      margin-left: 0;
+    }
+  }
+
+  /* Custom App-like Styles */
+  .form-control:focus, .form-select:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    border-color: var(--yfs-primary);
+  }
+
+  .btn-primary {
+      background-color: var(--yfs-primary);
+      border-color: var(--yfs-primary);
+  }
+
+  .btn-success {
+      background-color: var(--yfs-secondary);
+      border-color: var(--yfs-secondary);
+  }
+
+  /* Make assessment grid inputs less intrusive */
+  .kpi-score {
+      text-align: center;
+  }
+</style>
