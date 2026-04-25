@@ -731,20 +731,43 @@ function loadAssessmentView() {
 
 async function setupClassDropdown() {
   const schoolId = document.getElementById('schoolSelect').value;
+  const classSelect = document.getElementById('classSelect');
+
   if (!schoolId) {
-    document.getElementById('classSelect').innerHTML = '<option value="">--Select Class--</option>';
+    classSelect.innerHTML = '<option value="">--Select Class--</option>';
+    classSelect.disabled = true; // Also disable if no school is selected
     return;
   }
   
+  // --- START: Provide immediate feedback ---
+  classSelect.disabled = true;
+  classSelect.innerHTML = '<option value="">Loading classes...</option>';
+  // --- END: Provide immediate feedback ---
+
   try {
     const students = await gsRun('getStudentsForSchool', schoolId);
     const classesSet = new Set(students.map(s => s.class).filter(Boolean));
-    const classes = Array.from(classesSet).sort();
-    const classSelect = document.getElementById('classSelect');
+    
+    if(classesSet.size === 0) {
+      classSelect.innerHTML = '<option value="">No classes found</option>';
+      // Keep it disabled as there's nothing to select
+      return; 
+    }
+
+    const classes = Array.from(classesSet).sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true}));
     classSelect.innerHTML = '<option value="">--Select Class--</option>';
     classes.forEach(c => classSelect.innerHTML += `<option value="${escHtml(c)}">${escHtml(c)}</option>`);
   } catch (err) {
     showToast('Error loading classes: ' + err.message, 'danger');
+    classSelect.innerHTML = '<option value="">Error fetching data</option>';
+  } finally {
+    // Re-enable the dropdown once the process is complete (success or fail)
+    // unless there are no classes to select.
+    if (classSelect.innerHTML.includes('No classes found')) {
+      classSelect.disabled = true;
+    } else {
+      classSelect.disabled = false;
+    }
   }
 }
 
@@ -762,16 +785,20 @@ async function loadStudentGrid() {
     return;
   }
 
-  const btn = event.target;
+  const btn = event.target.closest('button'); // Get button reference
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
   try {
     const allStudents = await gsRun('getStudentsForSchool', schoolId);
-    // Filter by selected class
-    const students = allStudents.filter(s => s.class === classFilter);
+    
+    // ▼▼▼ THE FIX IS HERE ▼▼▼
+    // We convert both s.class and classFilter to strings to ensure a correct comparison.
+    const students = allStudents.filter(s => String(s.class).trim() === String(classFilter).trim());
+    // ▲▲▲ THE FIX IS HERE ▲▲▲
+
     if (!students.length) {
-      errDiv.textContent = `No students found in class ${classFilter}.`;
+      errDiv.innerHTML = `No students found in class "<strong>${escHtml(classFilter)}</strong>". Please check the student data or select another class.`;
       errDiv.style.display = 'block';
       return;
     }
@@ -794,7 +821,6 @@ async function loadStudentGrid() {
     const kpis = await gsRun('getKpis');
     kpiMaster = kpis;
     
-    // Load existing assessment scores
     const existingScores = {};
     for (const student of students) {
       const scores = await gsRun('getExistingAssessmentScores', student.studentId, assessmentType);
@@ -807,7 +833,8 @@ async function loadStudentGrid() {
     showToast(err.message || 'Failed to load students.', 'danger');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Load Students';
+    // Restore original button content
+    btn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Load'; 
   }
 }
 
@@ -1415,40 +1442,6 @@ function addStudentRows() {
     body.innerHTML += `<tr data-id=""><td><input class="form-control form-control-sm student-name" placeholder="Student name"></td><td><input class="form-control form-control-sm student-class" placeholder="e.g. 7"></td><td class="text-center"></td></tr>`;
   }
   countInput.value = '';
-}
-
-function handleDeleteStudent(studentId, btn) {
-  if (!studentId) {
-    // New row - just remove from table
-    btn.closest('tr').remove();
-    return;
-  }
-  
-  const row = btn.closest('tr');
-  const studentName = row.querySelector('.student-name').value;
-  
-  showConfirmModal(
-    'Delete Student',
-    `Are you sure you want to delete "${escHtml(studentName)}"? This action cannot be undone.`,
-    () => {
-      btn.disabled = true;
-      google.script.run
-        .withSuccessHandler(res => {
-          if (res.success) {
-            row.remove();
-            showToast('Student deleted successfully.', 'success');
-          } else {
-            showToast(res.message || 'Could not delete student.', 'danger');
-            btn.disabled = false;
-          }
-        })
-        .withFailureHandler(err => {
-          showToast(err.message, 'danger');
-          btn.disabled = false;
-        })
-        .deleteStudent(studentId);
-    }
-  );
 }
 
 function handleDeleteStudent(studentId, btn) {
