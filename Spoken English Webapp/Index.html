@@ -171,11 +171,17 @@
         <div class="card shadow-sm border-0">
           <div class="card-body p-4">
             <div class="row g-3" id="assessment-setup">
-              <div class="col-md-6">
+              <div class="col-md-4">
                 <label class="form-label fw-semibold">School</label>
                 <select id="schoolSelect" class="form-select"></select>
               </div>
               <div class="col-md-4">
+                <label class="form-label fw-semibold">Class</label>
+                <select id="classSelect" class="form-select">
+                  <option value="">--Select Class--</option>
+                </select>
+              </div>
+              <div class="col-md-3">
                 <label class="form-label fw-semibold">Assessment Type</label>
                 <select id="assessmentTypeSelect" class="form-select">
                   <option value="">--Select Type--</option>
@@ -184,7 +190,7 @@
                   <option value="Endline">Endline</option>
                 </select>
               </div>
-              <div class="col-md-2 d-flex align-items-end">
+              <div class="col-md-1 d-flex align-items-end">
                 <button class="btn btn-primary w-100" onclick="loadStudentGrid()">
                   <i class="bi bi-arrow-repeat me-2"></i>Load
                 </button>
@@ -693,6 +699,7 @@ function loadAssessmentView() {
   document.getElementById('student-grid-container').style.display = 'none';
   document.getElementById('validation-error').style.display = 'none';
   document.getElementById('schoolSelect').innerHTML = '';
+  document.getElementById('classSelect').innerHTML = '<option value="">--Select Class--</option>';
   document.getElementById('assessmentTypeSelect').value = '';
   switchView('loadingView');
 
@@ -702,6 +709,7 @@ function loadAssessmentView() {
         const sel = document.getElementById('schoolSelect');
         sel.innerHTML = '<option value="">--Select School--</option>';
         schools.forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
+        sel.onchange = setupClassDropdown;
         switchView('assessmentView');
       })
       .withFailureHandler(showError)
@@ -713,6 +721,7 @@ function loadAssessmentView() {
         const sel = document.getElementById('schoolSelect');
         sel.innerHTML = '<option value="">--Select School--</option>';
         (data.schools || []).forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
+        sel.onchange = setupClassDropdown;
         switchView('assessmentView');
       })
       .withFailureHandler(showError)
@@ -720,15 +729,36 @@ function loadAssessmentView() {
   }
 }
 
+async function setupClassDropdown() {
+  const schoolId = document.getElementById('schoolSelect').value;
+  if (!schoolId) {
+    document.getElementById('classSelect').innerHTML = '<option value="">--Select Class--</option>';
+    return;
+  }
+  
+  try {
+    const students = await gsRun('getStudentsForSchool', schoolId);
+    const classesSet = new Set(students.map(s => s.class).filter(Boolean));
+    const classes = Array.from(classesSet).sort();
+    const classSelect = document.getElementById('classSelect');
+    classSelect.innerHTML = '<option value="">--Select Class--</option>';
+    classes.forEach(c => classSelect.innerHTML += `<option value="${escHtml(c)}">${escHtml(c)}</option>`);
+  } catch (err) {
+    showToast('Error loading classes: ' + err.message, 'danger');
+  }
+}
+}
+
 async function loadStudentGrid() {
   const schoolId = document.getElementById('schoolSelect').value;
+  const classFilter = document.getElementById('classSelect').value;
   const assessmentType = document.getElementById('assessmentTypeSelect').value;
   const errDiv = document.getElementById('validation-error');
   errDiv.style.display = 'none';
   document.getElementById('student-grid-container').style.display = 'none';
 
-  if (!schoolId || !assessmentType) {
-    errDiv.textContent = 'Please select a school and an assessment type.';
+  if (!schoolId || !classFilter || !assessmentType) {
+    errDiv.textContent = 'Please select a school, class, and assessment type.';
     errDiv.style.display = 'block';
     return;
   }
@@ -738,9 +768,11 @@ async function loadStudentGrid() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
   try {
-    const students = await gsRun('getStudentsForSchool', schoolId);
+    const allStudents = await gsRun('getStudentsForSchool', schoolId);
+    // Filter by selected class
+    const students = allStudents.filter(s => s.class === classFilter);
     if (!students.length) {
-      errDiv.textContent = 'No students found for this school.';
+      errDiv.textContent = `No students found in class ${classFilter}.`;
       errDiv.style.display = 'block';
       return;
     }
@@ -762,7 +794,15 @@ async function loadStudentGrid() {
 
     const kpis = await gsRun('getKpis');
     kpiMaster = kpis;
-    renderAssessmentGrid(students, kpis);
+    
+    // Load existing assessment scores
+    const existingScores = {};
+    for (const student of students) {
+      const scores = await gsRun('getExistingAssessmentScores', student.studentId, assessmentType);
+      existingScores[student.studentId] = scores;
+    }
+    
+    renderAssessmentGrid(students, kpis, existingScores);
     document.getElementById('student-grid-container').style.display = 'block';
   } catch(err) {
     showToast(err.message || 'Failed to load students.', 'danger');
@@ -772,7 +812,7 @@ async function loadStudentGrid() {
   }
 }
 
-function renderAssessmentGrid(students, kpis) {
+function renderAssessmentGrid(students, kpis, existingScores = {}) {
   const head = document.getElementById('assessment-grid-head');
   const body = document.getElementById('assessment-grid-body');
   let hHtml = '<tr><th>Student</th>';
@@ -782,15 +822,21 @@ function renderAssessmentGrid(students, kpis) {
 
   let bHtml = '';
   students.forEach(s => {
+    const scores = existingScores[s.studentId] || [];
+    const scoresByKpi = {};
+    scores.forEach(score => { scoresByKpi[score.kpiId] = score.score; });
+    const hasScores = scores.length > 0;
+    
     bHtml += `<tr data-studentid="${s.studentId}"><td>${s.studentName} <small class="text-muted">(Cls ${s.class})</small></td>`;
     kpis.forEach(k => {
-      bHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${k.id}" min="1" max="5" style="width:65px;margin:auto;"></td>`;
+      const value = scoresByKpi[k.id] || '';
+      bHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${k.id}" min="1" max="5" value="${value}" style="width:65px;margin:auto;"></td>`;
     });
     bHtml += `<td class="text-center">
       <div class="form-check form-switch d-flex justify-content-center">
-        <input class="form-check-input attendance-toggle" type="checkbox" role="switch" checked onchange="toggleAttendance(this)" style="width:2.5em;height:1.3em;">
+        <input class="form-check-input attendance-toggle" type="checkbox" role="switch" ${hasScores ? 'checked' : ''} onchange="toggleAttendance(this)" style="width:2.5em;height:1.3em;">
       </div>
-      <small class="attendance-label text-success fw-semibold">Present</small>
+      <small class="attendance-label ${hasScores ? 'text-success' : 'text-success'} fw-semibold">${hasScores ? 'Present' : 'Present'}</small>
     </td></tr>`;
   });
   body.innerHTML = bHtml;
@@ -869,10 +915,15 @@ function setupManagementUI(data) {
   setupLiveSearch('mapSchSearch', 'mapSchoolSelect');
   setupLiveSearch('manageSchSearch', 'manageSchoolSelect');
 
-  // Populate mapping selects
+  // Populate mapping selects - filter out already mapped volunteers and schools
+  const mappedVolunteerEmails = new Set(mappings.map(m => m.volunteerEmail));
+  const mappedSchoolIds = new Set(mappings.map(m => m.schoolId));
+  
   const volSel = document.getElementById('mapVolunteerSelect');
   volSel.innerHTML = '';
-  volunteers.forEach(v => volSel.innerHTML += `<option value="${v.email}">${v.name} (${v.email})</option>`);
+  volunteers.filter(v => !mappedVolunteerEmails.has(v.email)).forEach(v => 
+    volSel.innerHTML += `<option value="${v.email}">${v.name} (${v.email})</option>`
+  );
 
   const schSel = document.getElementById('mapSchoolSelect');
   schSel.innerHTML = '';
@@ -881,6 +932,10 @@ function setupManagementUI(data) {
   schools.forEach(s => {
     schSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
     manageSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+  });
+  // Filter mapped schools from mapping select only
+  Array.from(schSel.options).forEach((opt, idx) => {
+    if (mappedSchoolIds.has(opt.value)) schSel.remove(idx);
   });
 
   // Render all tables
@@ -1334,13 +1389,18 @@ function renderManagedStudentGrid(students) {
   const body = document.getElementById('manageStudentTableBody');
   body.innerHTML = '';
   if (!students.length) {
-    body.innerHTML = `<tr id="no-managed-students-row"><td colspan="2" class="text-center text-muted p-3">No students found. Use "Add Rows" to begin.</td></tr>`;
+    body.innerHTML = `<tr id="no-managed-students-row"><td colspan="3" class="text-center text-muted p-3">No students found. Use "Add Rows" to begin.</td></tr>`;
     return;
   }
   students.forEach(s => {
     body.innerHTML += `<tr data-id="${s.studentId}">
-      <td><input class="form-control form-control-sm student-name" value="${escHtml(s.studentName)}"></td>
-      <td><input class="form-control form-control-sm student-class" value="${escHtml(s.class || '')}"></td>
+      <td><input class="form-control form-control-sm student-name" value="${escHtml(s.studentName)}" placeholder="Student name"></td>
+      <td><input class="form-control form-control-sm student-class" value="${escHtml(s.class || '')}" placeholder="e.g. 7"></td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-outline-danger" onclick="handleDeleteStudent('${escHtml(s.studentId)}', this)" title="Delete student">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
     </tr>`;
   });
 }
@@ -1353,9 +1413,77 @@ function addStudentRows() {
   const placeholder = document.getElementById('no-managed-students-row');
   if (placeholder) placeholder.remove();
   for (let i = 0; i < count; i++) {
-    body.innerHTML += `<tr data-id=""><td><input class="form-control form-control-sm student-name" placeholder="Student name"></td><td><input class="form-control form-control-sm student-class" placeholder="e.g. 7"></td></tr>`;
+    body.innerHTML += `<tr data-id=""><td><input class="form-control form-control-sm student-name" placeholder="Student name"></td><td><input class="form-control form-control-sm student-class" placeholder="e.g. 7"></td><td class="text-center"></td></tr>`;
   }
   countInput.value = '';
+}
+
+function handleDeleteStudent(studentId, btn) {
+  if (!studentId) {
+    // New row - just remove from table
+    btn.closest('tr').remove();
+    return;
+  }
+  
+  const row = btn.closest('tr');
+  const studentName = row.querySelector('.student-name').value;
+  
+  showConfirmModal(
+    'Delete Student',
+    `Are you sure you want to delete "${escHtml(studentName)}"? This action cannot be undone.`,
+    () => {
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res.success) {
+            row.remove();
+            showToast('Student deleted successfully.', 'success');
+          } else {
+            showToast(res.message || 'Could not delete student.', 'danger');
+            btn.disabled = false;
+          }
+        })
+        .withFailureHandler(err => {
+          showToast(err.message, 'danger');
+          btn.disabled = false;
+        })
+        .deleteStudent(studentId);
+    }
+  );
+}
+
+function handleDeleteStudent(studentId, btn) {
+  if (!studentId) {
+    // New row - just remove from table
+    btn.closest('tr').remove();
+    return;
+  }
+  
+  const row = btn.closest('tr');
+  const studentName = row.querySelector('.student-name').value;
+  
+  showConfirmModal(
+    'Delete Student',
+    `Are you sure you want to delete "${escHtml(studentName)}"? This action cannot be undone.`,
+    () => {
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res.success) {
+            row.remove();
+            showToast('Student deleted successfully.', 'success');
+          } else {
+            showToast(res.message || 'Could not delete student.', 'danger');
+            btn.disabled = false;
+          }
+        })
+        .withFailureHandler(err => {
+          showToast(err.message, 'danger');
+          btn.disabled = false;
+        })
+        .deleteStudent(studentId);
+    }
+  );
 }
 
 function saveManagedStudents(btn) {

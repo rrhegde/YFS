@@ -107,6 +107,17 @@ function getExistingAssessmentTypes(studentId) {
   return Array.from(types);
 }
 
+function getExistingAssessmentScores(studentId, assessmentType) {
+  const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+  const scores = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] == studentId && data[i][4] === assessmentType && data[i][7] === 'Present') {
+      scores.push({ kpiId: data[i][5], score: data[i][6] });
+    }
+  }
+  return scores;
+}
+
 function saveAssessments(assessmentData) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy. Please try again.' };
@@ -287,6 +298,18 @@ function saveOrUpdateStudents(students, schoolId) {
     return { success: true, message: 'Students saved successfully!' };
   } catch (e) { Logger.log(e); return { success: false, message: e.message }; }
   finally { lock.releaseLock(); }
+}
+
+function deleteStudent(studentId) {
+  const sheet = SS.getSheetByName(SHEETS.STUDENTS);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === studentId) {
+      sheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false, message: 'Student not found.' };
 }
 
 function generateUniqueId() {
