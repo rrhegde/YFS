@@ -231,6 +231,22 @@ function mapVolunteerToSchool(mappingData) {
   };
 }
 
+function deleteSchool(schoolId) {
+  const email = Session.getActiveUser().getEmail();
+  const user = getVerifiedUser(email);
+  if (!user || !['Admin','Supervisor'].includes(user.role)) throw new Error('Authorization failed.');
+
+  const sheet = SS.getSheetByName(SHEETS.SCHOOLS);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === schoolId) {
+      sheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false, message: 'School not found.' };
+}
+
 function deleteMapping(mappingId) {
   const email = Session.getActiveUser().getEmail();
   const user = getVerifiedUser(email);

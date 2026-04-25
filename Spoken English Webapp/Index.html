@@ -15,14 +15,20 @@
 
 <div class="d-flex" id="app-wrapper">
   <!-- Sidebar -->
-  <nav class="sidebar bg-light border-end" id="sidebar">
-    <div class="sidebar-header border-bottom">
-      <a href="#" class="d-flex align-items-center text-decoration-none p-3" onclick="switchView('dashboardView'); return false;">
-        <i class="bi bi-book-half fs-4 me-2 text-primary"></i>
-        <span class="fs-5 fw-semibold">Spoken English</span>
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <a href="#" class="d-flex align-items-center text-decoration-none" onclick="switchView('dashboardView'); return false;">
+        <div class="logo-container file-input-wrapper">
+          <img id="sidebarLogo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' fill='%232563eb' viewBox='0 0 16 16'%3E%3Cpath d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z'/%3E%3C/svg%3E" class="logo-img" alt="Logo" title="Click to upload logo">
+          <input type="file" id="logoFileInput" accept="image/*" style="display:none;">
+        </div>
+        <div>
+          <div class="sidebar-brand">Spoken English</div>
+          <div class="sidebar-subtitle">Portal</div>
+        </div>
       </a>
     </div>
-    <div class="list-group list-group-flush mt-2">
+    <div class="list-group list-group-flush mt-3">
       <a href="#" class="list-group-item list-group-item-action" onclick="switchView('dashboardView'); return false;" id="nav-dashboard">
         <i class="bi bi-grid-1x2-fill me-2"></i> Dashboard
       </a>
@@ -33,9 +39,9 @@
         <i class="bi bi-people-fill me-2"></i> Manage
       </a>
     </div>
-    <div class="p-3 border-top mt-auto" id="sidebar-user" style="display:none; position:absolute; bottom:0; width:100%;">
-      <small class="text-muted d-block text-truncate" id="sidebarEmail"></small>
-      <span class="badge" id="sidebarRole"></span>
+    <div class="p-3 rounded m-2" id="sidebar-user" style="display:none; position:absolute; bottom:20px; width:calc(100% - 1rem);">
+      <small class="text-truncate d-block" style="color: rgba(255,255,255,0.8);" id="sidebarEmail"></small>
+      <span class="badge mt-2" id="sidebarRole"></span>
     </div>
   </nav>
 
@@ -52,20 +58,24 @@
 
       <!-- PIN View -->
       <div id="pinView" class="view" style="display:none;">
-        <div class="row justify-content-center mt-5">
+        <div class="row justify-content-center align-items-center" style="min-height: 100vh;">
           <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm">
-              <div class="card-body p-4">
-                <div class="text-center mb-4">
-                  <i class="bi bi-shield-lock-fill fs-1 text-primary"></i>
-                  <h4 class="mt-2">Volunteer Login</h4>
-                  <p class="text-muted small">Enter your 4-digit PIN to continue</p>
+            <div class="card shadow-lg border-0" style="border-radius: 16px; overflow: hidden;">
+              <div class="card-body p-5">
+                <div class="text-center mb-5">
+                  <div style="width: 80px; height: 80px; background: linear-gradient(135deg, var(--yfs-primary) 0%, #1d4ed8 100%); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                    <i class="bi bi-shield-lock-fill fs-2" style="color: white;"></i>
+                  </div>
+                  <h4 class="mb-2" style="font-weight: 700; color: var(--text-primary);">Volunteer Login</h4>
+                  <p class="text-muted" style="font-size: 0.95rem;">Enter your 4-digit PIN to continue</p>
                 </div>
-                <input type="password" id="pinInput" class="form-control form-control-lg text-center mb-3" inputmode="numeric" pattern="[0-9]*" placeholder="••••" autocomplete="one-time-code">
+                <input type="password" id="pinInput" class="form-control form-control-lg text-center mb-3" inputmode="numeric" pattern="[0-9]*" placeholder="••••" autocomplete="one-time-code" style="letter-spacing: 8px; font-size: 1.8rem; font-weight: 300;">
                 <div class="d-grid">
-                  <button class="btn btn-primary btn-lg" onclick="handlePinSubmit()">Unlock</button>
+                  <button class="btn btn-primary btn-lg" onclick="handlePinSubmit()" style="font-weight: 600; padding: 0.8rem;">
+                    <i class="bi bi-arrow-right-circle me-2"></i>Unlock
+                  </button>
                 </div>
-                <div id="pinError" class="alert alert-danger mt-3 text-center py-2" style="display:none;">
+                <div id="pinError" class="alert alert-danger mt-3 text-center py-2" style="display:none; border-radius: 10px;">
                   <i class="bi bi-exclamation-triangle me-1"></i>Invalid PIN. Please try again.
                 </div>
               </div>
@@ -76,35 +86,59 @@
 
       <!-- Dashboard View -->
       <div id="dashboardView" class="view" style="display:none;">
-        <div class="d-flex align-items-center mb-4">
-          <div>
-            <h2 class="mb-0">Dashboard</h2>
-            <p class="text-muted mb-0">Welcome back, <strong id="userEmail"></strong></p>
+        <div class="mb-5">
+          <div class="d-flex align-items-center justify-content-between mb-4">
+            <div>
+              <h1 class="mb-1" style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary);">Dashboard</h1>
+              <p class="text-muted mb-0" style="font-size: 1rem;">Welcome back, <strong id="userEmail"></strong></p>
+            </div>
+            <span id="userRole" class="badge fs-6 px-4 py-2" style="font-size: 0.95rem;"></span>
           </div>
-          <span id="userRole" class="badge bg-primary ms-3 fs-6"></span>
         </div>
-        <div class="row g-3">
+        
+        <div class="row g-4 mb-5">
           <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-              <div class="card-body d-flex align-items-center">
-                <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3"><i class="bi bi-building fs-4 text-primary"></i></div>
-                <div><div class="text-muted small">Schools</div><div class="fs-3 fw-bold">--</div></div>
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Schools</p>
+                    <p class="stat-value mb-0">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(37, 99, 235, 0.05) 100%); color: var(--yfs-primary);">
+                    <i class="bi bi-building"></i>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
           <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-              <div class="card-body d-flex align-items-center">
-                <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3"><i class="bi bi-people fs-4 text-success"></i></div>
-                <div><div class="text-muted small">Students</div><div class="fs-3 fw-bold">--</div></div>
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Students</p>
+                    <p class="stat-value mb-0">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%); color: var(--yfs-secondary);">
+                    <i class="bi bi-people"></i>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
           <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-              <div class="card-body d-flex align-items-center">
-                <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3"><i class="bi bi-clipboard-check fs-4 text-warning"></i></div>
-                <div><div class="text-muted small">Assessments</div><div class="fs-3 fw-bold">--</div></div>
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Assessments</p>
+                    <p class="stat-value mb-0">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%); color: var(--yfs-accent);">
+                    <i class="bi bi-clipboard-check"></i>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -113,9 +147,12 @@
 
       <!-- Assessment View -->
       <div id="assessmentView" class="view" style="display:none;">
-        <h2 class="mb-4">Student Assessment</h2>
+        <div class="mb-4">
+          <h1 style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary); margin-bottom: 0.5rem;">Student Assessment</h1>
+          <p class="text-muted mb-0">Enter and manage student assessment scores</p>
+        </div>
         <div class="card shadow-sm border-0">
-          <div class="card-body">
+          <div class="card-body p-4">
             <div class="row g-3" id="assessment-setup">
               <div class="col-md-6">
                 <label class="form-label fw-semibold">School</label>
@@ -131,19 +168,21 @@
                 </select>
               </div>
               <div class="col-md-2 d-flex align-items-end">
-                <button class="btn btn-primary w-100" onclick="loadStudentGrid()">Load Students</button>
+                <button class="btn btn-primary w-100" onclick="loadStudentGrid()">
+                  <i class="bi bi-arrow-repeat me-2"></i>Load
+                </button>
               </div>
             </div>
             <div id="validation-error" class="alert alert-danger mt-3" style="display:none;"></div>
-            <div id="student-grid-container" class="mt-4" style="display:none;">
+            <div id="student-grid-container" class="mt-4" style="display: none;">
               <div class="table-responsive">
                 <table class="table table-bordered table-hover align-middle">
                   <thead class="table-light" id="assessment-grid-head"></thead>
                   <tbody id="assessment-grid-body"></tbody>
                 </table>
               </div>
-              <div class="d-flex justify-content-end mt-3">
-                <button class="btn btn-success px-4" onclick="handleSaveAssessments()">
+              <div class="d-flex justify-content-end mt-4">
+                <button class="btn btn-success px-5" onclick="handleSaveAssessments()">
                   <i class="bi bi-check-circle-fill me-2"></i>Save Assessments
                 </button>
               </div>
@@ -154,13 +193,21 @@
 
       <!-- Manage View -->
       <div id="manageView" class="view" style="display:none;">
-        <h2 class="mb-4">Management</h2>
+        <div class="mb-4">
+          <h1 style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary); margin-bottom: 0.5rem;">Management</h1>
+          <p class="text-muted mb-0">Manage schools, volunteers, mappings, and student data</p>
+        </div>
         <div class="card shadow-sm border-0">
           <div class="card-header bg-white border-bottom">
             <ul class="nav nav-tabs card-header-tabs" id="manageTabs">
               <li class="nav-item">
                 <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-add-school" id="tab-btn-school">
                   <i class="bi bi-building-add me-1"></i>Add School
+                </button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students">
+                  <i class="bi bi-person-lines-fill me-1"></i>Manage Students
                 </button>
               </li>
               <li class="nav-item" id="nav-tab-volunteer" style="display:none;">
@@ -171,11 +218,6 @@
               <li class="nav-item" id="nav-tab-map" style="display:none;">
                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-map-volunteer">
                   <i class="bi bi-diagram-3 me-1"></i>Map Volunteer
-                </button>
-              </li>
-              <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students">
-                  <i class="bi bi-person-lines-fill me-1"></i>Manage Students
                 </button>
               </li>
             </ul>
@@ -189,6 +231,10 @@
                   <!-- Form column -->
                   <div class="col-lg-5">
                     <h5 class="mb-3">New School</h5>
+                    <div id="schoolFormAlert" class="alert alert-warning py-2 px-3 d-flex align-items-center gap-2" style="display:none !important;">
+                      <i class="bi bi-exclamation-triangle-fill"></i>
+                      <span id="schoolFormAlertMsg"></span>
+                    </div>
                     <div class="row g-3" id="addSchoolFormFields">
                       <div class="col-12">
                         <label class="form-label">School Name <span class="text-danger">*</span></label>
@@ -225,19 +271,66 @@
                   </div>
                   <!-- Table column -->
                   <div class="col-lg-7">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                      <h5 class="mb-0">Schools Added <span class="badge bg-secondary" id="schoolCountBadge">0</span></h5>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h5 class="mb-0">Schools <span class="badge bg-secondary" id="schoolCountBadge">0</span></h5>
                     </div>
-                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+                    <input type="text" id="schoolTableSearch" class="form-control form-control-sm mb-2" placeholder="&#128269; Search schools...">
+                    <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
                       <table class="table table-sm table-hover align-middle">
                         <thead class="table-light sticky-top">
-                          <tr><th>Name</th><th>Region</th><th>Chapter</th><th>District</th><th>Strength</th></tr>
+                          <tr><th>Name</th><th>Chapter</th><th>District</th><th class="text-center">Str.</th><th class="text-center">Del</th></tr>
                         </thead>
                         <tbody id="schoolsTableBody">
                           <tr><td colspan="5" class="text-center text-muted p-3">No schools loaded yet.</td></tr>
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ═══ MANAGE STUDENTS TAB ═══ -->
+              <div class="tab-pane fade" id="tab-manage-students">
+                <div class="row g-3 mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Select School</label>
+                    <input type="text" id="manageSchSearch" class="form-control mb-2" placeholder="Search school...">
+                    <select id="manageSchoolSelect" class="form-select"></select>
+                  </div>
+                  <div class="col-md-6 d-flex align-items-end">
+                    <div id="studentCountInfo" style="display:none;">
+                      <span class="badge bg-primary fs-6 px-3 py-2">
+                        <i class="bi bi-people me-1"></i>
+                        <span id="studentCountLabel">0</span> students
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Loading indicator for student data -->
+                <div id="students-loading" style="display:none;" class="text-center py-4">
+                  <div class="spinner-border text-primary me-2" style="width:1.5rem;height:1.5rem;" role="status"></div>
+                  <span class="text-muted">Loading students...</span>
+                </div>
+
+                <div id="manage-students-container" style="display:none;">
+                  <div class="d-flex align-items-center mb-3 p-3 bg-light rounded gap-2">
+                    <label class="form-label mb-0 me-1">Add rows:</label>
+                    <input type="number" id="rowsToAddInput" class="form-control" style="width:90px;" placeholder="e.g. 5" min="1">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="addStudentRows()">
+                      <i class="bi bi-plus-lg me-1"></i>Add Rows
+                    </button>
+                    <button class="btn btn-success ms-auto" onclick="saveManagedStudents(this)">
+                      <i class="bi bi-floppy me-1"></i>Save Students
+                    </button>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-bordered align-middle">
+                      <thead class="table-light">
+                        <tr><th style="width:55%">Student Name</th><th>Class</th></tr>
+                      </thead>
+                      <tbody id="manageStudentTableBody"></tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -278,16 +371,21 @@
                     </button>
                   </div>
                   <div class="col-lg-7">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
                       <h5 class="mb-0">Volunteers <span class="badge bg-secondary" id="volCountBadge">0</span></h5>
                     </div>
-                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+                    <div id="volFormAlert" class="alert alert-warning py-2 px-3 d-flex align-items-center gap-2 mb-2" style="display:none !important;">
+                      <i class="bi bi-exclamation-triangle-fill"></i>
+                      <span id="volFormAlertMsg"></span>
+                    </div>
+                    <input type="text" id="volTableSearch" class="form-control form-control-sm mb-2" placeholder="&#128269; Search volunteers...">
+                    <div class="table-responsive" style="max-height:380px; overflow-y:auto;">
                       <table class="table table-sm table-hover align-middle">
                         <thead class="table-light sticky-top">
-                          <tr><th>Name</th><th>Email</th><th>Region</th><th>Chapter</th></tr>
+                          <tr><th>Name</th><th>Email</th><th>Chapter</th></tr>
                         </thead>
                         <tbody id="volunteersTableBody">
-                          <tr><td colspan="4" class="text-center text-muted p-3">No volunteers loaded yet.</td></tr>
+                          <tr><td colspan="3" class="text-center text-muted p-3">No volunteers loaded yet.</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -317,10 +415,11 @@
                   </div>
                   <!-- Mappings table -->
                   <div class="col-lg-7">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
                       <h5 class="mb-0">Current Mappings <span class="badge bg-secondary" id="mapCountBadge">0</span></h5>
                     </div>
-                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
+                    <input type="text" id="mappingsTableSearch" class="form-control form-control-sm mb-2" placeholder="&#128269; Search mappings...">
+                    <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
                       <table class="table table-sm table-hover align-middle">
                         <thead class="table-light sticky-top">
                           <tr><th>Volunteer</th><th>School</th><th class="text-center">Action</th></tr>
@@ -333,39 +432,6 @@
                   </div>
                 </div>
               </div>
-
-              <!-- ═══ MANAGE STUDENTS TAB ═══ -->
-              <div class="tab-pane fade" id="tab-manage-students">
-                <div class="row g-3 mb-3">
-                  <div class="col-md-6">
-                    <label class="form-label fw-semibold">Select School</label>
-                    <input type="text" id="manageSchSearch" class="form-control mb-2" placeholder="Search school...">
-                    <select id="manageSchoolSelect" class="form-select"></select>
-                  </div>
-                </div>
-
-                <div id="manage-students-container" style="display:none;">
-                  <div class="d-flex align-items-center mb-3 p-3 bg-light rounded gap-2">
-                    <label class="form-label mb-0 me-1">Add rows:</label>
-                    <input type="number" id="rowsToAddInput" class="form-control" style="width:90px;" placeholder="e.g. 5" min="1">
-                    <button class="btn btn-outline-secondary btn-sm" onclick="addStudentRows()">
-                      <i class="bi bi-plus-lg me-1"></i>Add Rows
-                    </button>
-                    <button class="btn btn-success ms-auto" onclick="saveManagedStudents(this)">
-                      <i class="bi bi-floppy me-1"></i>Save Students
-                    </button>
-                  </div>
-                  <div class="table-responsive">
-                    <table class="table table-bordered align-middle">
-                      <thead class="table-light">
-                        <tr><th style="width:55%">Student Name</th><th>Class</th></tr>
-                      </thead>
-                      <tbody id="manageStudentTableBody"></tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
             </div><!-- /tab-content -->
           </div>
         </div>
@@ -373,9 +439,21 @@
 
       <!-- Unauthorized View -->
       <div id="unauthorizedView" class="view" style="display:none;">
-        <div class="alert alert-danger d-flex align-items-center">
-          <i class="bi bi-shield-exclamation fs-4 me-3"></i>
-          <div>You are not authorized to access this application. Please contact your administrator.</div>
+        <div class="row justify-content-center align-items-center" style="min-height: 100vh;">
+          <div class="col-md-6">
+            <div class="card border-0 shadow-lg" style="border-radius: 16px;">
+              <div class="card-body p-5 text-center">
+                <div style="width: 80px; height: 80px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                  <i class="bi bi-shield-exclamation fs-2" style="color: var(--yfs-danger);"></i>
+                </div>
+                <h3 class="mb-3" style="font-weight: 700; color: var(--text-primary);">Access Denied</h3>
+                <p class="alert alert-danger d-flex align-items-center">
+                  <i class="bi bi-exclamation-triangle me-2"></i>
+                  <div>You are not authorized to access this application. Please contact your administrator.</div>
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -398,30 +476,87 @@ let mgmtData = { schools: [], volunteers: [], mappings: [] };
 //  TOAST NOTIFICATION SYSTEM (replaces all alert() calls)
 // ═══════════════════════════════════════════════════════════
 function showToast(message, type = 'success', duration = 4000) {
-  const icons = { success: 'bi-check-circle-fill', danger: 'bi-x-circle-fill', warning: 'bi-exclamation-triangle-fill', info: 'bi-info-circle-fill' };
-  const colors = { success: 'text-success', danger: 'text-danger', warning: 'text-warning', info: 'text-primary' };
-  const id = 'toast-' + Date.now();
+  // Map types to Bootstrap alert classes
+  const alertTypes = { 
+    success: 'alert-success', 
+    danger: 'alert-danger', 
+    warning: 'alert-warning', 
+    info: 'alert-info' 
+  };
+  const icons = { 
+    success: 'bi-check-circle-fill', 
+    danger: 'bi-x-circle-fill', 
+    warning: 'bi-exclamation-triangle-fill', 
+    info: 'bi-info-circle-fill' 
+  };
+  
+  const id = 'alert-' + Date.now();
+  const alertClass = alertTypes[type] || alertTypes.info;
+  const icon = icons[type] || icons.info;
+  
   const html = `
-    <div id="${id}" class="toast align-items-center border-0 shadow" role="alert" aria-live="assertive" data-bs-autohide="true" data-bs-delay="${duration}">
-      <div class="d-flex">
-        <div class="toast-body d-flex align-items-center gap-2">
-          <i class="bi ${icons[type] || icons.info} ${colors[type] || colors.info} fs-5"></i>
-          <span>${message}</span>
-        </div>
-        <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
-      </div>
+    <div id="${id}" class="alert ${alertClass} d-flex align-items-center gap-2 py-3 px-4 shadow-sm" role="alert">
+      <i class="bi ${icon} fs-5"></i>
+      <span class="flex-grow-1">${message}</span>
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>`;
-  document.getElementById('toastContainer').insertAdjacentHTML('beforeend', html);
-  const toastEl = document.getElementById(id);
-  const toast = new bootstrap.Toast(toastEl);
-  toast.show();
-  toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+  
+  const container = document.getElementById('toastContainer');
+  container.insertAdjacentHTML('beforeend', html);
+  const alertEl = document.getElementById(id);
+  
+  // Auto-hide after duration
+  setTimeout(() => {
+    alertEl.style.opacity = '0';
+    alertEl.style.transition = 'opacity 0.3s ease-out';
+    setTimeout(() => alertEl.remove(), 300);
+  }, duration);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LOGO UPLOAD
+// ═══════════════════════════════════════════════════════════
+function setupLogoUpload() {
+  const logoImg = document.getElementById('sidebarLogo');
+  const fileInput = document.getElementById('logoFileInput');
+  
+  // Click logo to upload
+  logoImg.addEventListener('click', () => fileInput.click());
+  
+  // Handle file selection
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const logoData = event.target.result;
+        // Save to localStorage
+        localStorage.setItem('appLogo', logoData);
+        // Update display
+        logoImg.src = logoData;
+        logoImg.title = 'Click to change logo';
+        showToast('Logo uploaded successfully!', 'success');
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+function loadStoredLogo() {
+  const storedLogo = localStorage.getItem('appLogo');
+  if (storedLogo) {
+    const logoImg = document.getElementById('sidebarLogo');
+    logoImg.src = storedLogo;
+    logoImg.title = 'Click to change logo';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
 //  INIT & AUTH
 // ═══════════════════════════════════════════════════════════
 window.addEventListener('load', function() {
+  setupLogoUpload();
+  loadStoredLogo();
   switchView('loadingView');
   google.script.run.withSuccessHandler(handleUserAuth).withFailureHandler(showError).getUserDetails();
 });
@@ -439,7 +574,27 @@ function initializeApp(user) {
   document.getElementById('userRole').textContent = user.role;
   document.getElementById('sidebarEmail').textContent = user.email;
   document.getElementById('sidebarRole').textContent = user.role;
-  document.getElementById('sidebarRole').className = 'badge ' + (user.role === 'Admin' ? 'bg-danger' : user.role === 'Supervisor' ? 'bg-warning text-dark' : 'bg-success');
+  const roleBadge = document.getElementById('sidebarRole');
+  if (user.role === 'Admin') {
+    roleBadge.className = 'badge bg-danger';
+    roleBadge.style.background = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+  } else if (user.role === 'Supervisor') {
+    roleBadge.className = 'badge';
+    roleBadge.style.background = 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)';
+    roleBadge.style.color = 'white';
+  } else {
+    roleBadge.className = 'badge';
+    roleBadge.style.background = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+  }
+  const dashboardBadge = document.getElementById('userRole');
+  if (user.role === 'Admin') {
+    dashboardBadge.style.background = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+  } else if (user.role === 'Supervisor') {
+    dashboardBadge.style.background = 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)';
+    dashboardBadge.style.color = 'white';
+  } else {
+    dashboardBadge.style.background = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+  }
   document.getElementById('sidebar-user').style.display = 'block';
   setupUIBasedOnRole(user.role);
   switchView('dashboardView');
@@ -745,13 +900,36 @@ function renderSchoolsTable(schools) {
     return;
   }
   body.innerHTML = schools.map(s => `
-    <tr>
-      <td>${s.name}</td>
-      <td><span class="badge bg-light text-dark border">${s.region || ''}</span></td>
-      <td>${s.chapter || ''}</td>
-      <td>${s.district || ''}</td>
-      <td class="text-center">${s.strength || ''}</td>
+    <tr id="school-row-${escHtml(s.id)}">
+      <td><div class="fw-semibold">${escHtml(s.name)}</div><small class="text-muted">${escHtml(s.region||'')}</small></td>
+      <td>${escHtml(s.chapter||'')}</td>
+      <td>${escHtml(s.district||'')}</td>
+      <td class="text-center">${s.strength||''}</td>
+      <td class="text-center">
+        <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteSchool('${escHtml(s.id)}', this)" title="Delete school">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
     </tr>`).join('');
+
+  // Wire up search filter
+  const searchEl = document.getElementById('schoolTableSearch');
+  if (searchEl) {
+    searchEl.oninput = function() {
+      const term = this.value.toLowerCase();
+      document.querySelectorAll('#schoolsTableBody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      });
+    };
+  }
+}
+
+function showSchoolFormAlert(msg) {
+  const el = document.getElementById('schoolFormAlert');
+  document.getElementById('schoolFormAlertMsg').textContent = msg;
+  el.style.display = 'flex';
+  el.style.setProperty('display', 'flex', 'important');
+  setTimeout(() => { el.style.setProperty('display', 'none', 'important'); }, 5000);
 }
 
 function handleAddSchool(btn) {
@@ -761,7 +939,16 @@ function handleAddSchool(btn) {
   const strength = document.getElementById('schoolStrength').value;
 
   if (!name || !region || !chapter || !strength) {
-    showToast('Please fill in all required fields.', 'warning');
+    showSchoolFormAlert('Please fill in all required fields (Name, Region, Chapter, Strength).');
+    return;
+  }
+
+  // Duplicate check (case-insensitive, same chapter)
+  const duplicate = mgmtData.schools.find(s =>
+    s.name.toLowerCase() === name.toLowerCase() && s.chapter === chapter
+  );
+  if (duplicate) {
+    showSchoolFormAlert(`"${name}" already exists in ${chapter}. Please check before adding again.`);
     return;
   }
 
@@ -781,9 +968,7 @@ function handleAddSchool(btn) {
         showToast(res.message, 'success');
         mgmtData.schools.push(res.school);
         renderSchoolsTable(mgmtData.schools);
-        // Refresh mapping/manage selects too
         refreshSchoolSelects();
-        // Clear form
         ['schoolName','schoolTaluk','schoolDistrict','schoolStrength'].forEach(id => document.getElementById(id).value = '');
         if (!document.getElementById('schoolRegion').disabled) {
           document.getElementById('schoolRegion').value = '';
@@ -804,6 +989,25 @@ function handleAddSchool(btn) {
     .addSchool(schoolData);
 }
 
+function handleDeleteSchool(schoolId, btn) {
+  if (!confirm('Delete this school? This cannot be undone.')) return;
+  btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success) {
+        mgmtData.schools = mgmtData.schools.filter(s => s.id !== schoolId);
+        renderSchoolsTable(mgmtData.schools);
+        refreshSchoolSelects();
+        showToast('School deleted.', 'success');
+      } else {
+        showToast(res.message || 'Could not delete.', 'danger');
+        btn.disabled = false;
+      }
+    })
+    .withFailureHandler(err => { showToast(err.message, 'danger'); btn.disabled = false; })
+    .deleteSchool(schoolId);
+}
+
 function refreshSchoolSelects() {
   const schools = mgmtData.schools;
   const schSel = document.getElementById('mapSchoolSelect');
@@ -821,16 +1025,25 @@ function renderVolunteersTable(volunteers) {
   const body = document.getElementById('volunteersTableBody');
   document.getElementById('volCountBadge').textContent = volunteers.length;
   if (!volunteers.length) {
-    body.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-3">No volunteers yet.</td></tr>';
+    body.innerHTML = '<tr><td colspan="3" class="text-center text-muted p-3">No volunteers yet.</td></tr>';
     return;
   }
   body.innerHTML = volunteers.map(v => `
     <tr>
-      <td>${v.name}</td>
-      <td><small class="text-muted">${v.email}</small></td>
-      <td><span class="badge bg-light text-dark border">${v.region || ''}</span></td>
-      <td>${v.chapter || ''}</td>
+      <td><div class="fw-semibold">${escHtml(v.name)}</div></td>
+      <td><small class="text-muted">${escHtml(v.email)}</small></td>
+      <td>${escHtml(v.chapter||'')}</td>
     </tr>`).join('');
+
+  const searchEl = document.getElementById('volTableSearch');
+  if (searchEl) {
+    searchEl.oninput = function() {
+      const term = this.value.toLowerCase();
+      document.querySelectorAll('#volunteersTableBody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      });
+    };
+  }
 }
 
 function handleAddVolunteer(btn) {
@@ -841,7 +1054,10 @@ function handleAddVolunteer(btn) {
   const chapter = document.getElementById('volunteerChapter').value;
 
   if (!name || !email || !pin || !region || !chapter) {
-    showToast('Please fill in all required fields.', 'warning');
+    const el = document.getElementById('volFormAlert');
+    document.getElementById('volFormAlertMsg').textContent = 'Please fill in all required fields.';
+    el.style.setProperty('display', 'flex', 'important');
+    setTimeout(() => el.style.setProperty('display', 'none', 'important'), 5000);
     return;
   }
   if (!/^\d{4}$/.test(pin)) {
@@ -858,7 +1074,6 @@ function handleAddVolunteer(btn) {
         showToast(res.message, 'success');
         mgmtData.volunteers.push(res.volunteer);
         renderVolunteersTable(mgmtData.volunteers);
-        // Refresh volunteer select in mapping tab
         const volSel = document.getElementById('mapVolunteerSelect');
         volSel.innerHTML += `<option value="${res.volunteer.email}">${res.volunteer.name} (${res.volunteer.email})</option>`;
         ['volunteerName','volunteerEmail','volunteerPin'].forEach(id => document.getElementById(id).value = '');
@@ -892,16 +1107,26 @@ function renderMappingsTable(mappings) {
   body.innerHTML = mappings.map(m => `
     <tr id="map-row-${m.mappingId}">
       <td>
-        <div class="fw-semibold">${m.volunteerName}</div>
-        <small class="text-muted">${m.volunteerEmail}</small>
+        <div class="fw-semibold">${escHtml(m.volunteerName)}</div>
+        <small class="text-muted">${escHtml(m.volunteerEmail)}</small>
       </td>
-      <td>${m.schoolName}</td>
+      <td>${escHtml(m.schoolName)}</td>
       <td class="text-center">
         <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteMapping('${m.mappingId}', this)" title="Remove mapping">
           <i class="bi bi-trash"></i>
         </button>
       </td>
     </tr>`).join('');
+
+  const searchEl = document.getElementById('mappingsTableSearch');
+  if (searchEl) {
+    searchEl.oninput = function() {
+      const term = this.value.toLowerCase();
+      document.querySelectorAll('#mappingsTableBody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      });
+    };
+  }
 }
 
 function handleMapVolunteer(btn) {
@@ -956,14 +1181,23 @@ function loadManagedStudents() {
   const schoolId = document.getElementById('manageSchoolSelect').value;
   if (!schoolId) return;
 
+  // Show loading, hide content
+  document.getElementById('manage-students-container').style.display = 'none';
+  document.getElementById('students-loading').style.display = 'block';
+  document.getElementById('studentCountInfo').style.display = 'none';
+
   google.script.run
     .withSuccessHandler(students => {
+      document.getElementById('students-loading').style.display = 'none';
       document.getElementById('manage-students-container').style.display = 'block';
+      const count = (students || []).length;
+      document.getElementById('studentCountLabel').textContent = count;
+      document.getElementById('studentCountInfo').style.display = 'block';
       renderManagedStudentGrid(students || []);
     })
     .withFailureHandler(err => {
+      document.getElementById('students-loading').style.display = 'none';
       showToast('Error loading students: ' + err.message, 'danger');
-      document.getElementById('manage-students-container').style.display = 'none';
     })
     .getStudentsBySchool(schoolId);
 }
@@ -998,13 +1232,15 @@ function addStudentRows() {
 
 function saveManagedStudents(btn) {
   const schoolId = document.getElementById('manageSchoolSelect').value;
+  if (!schoolId) { showToast('No school selected.', 'warning'); return; }
+
   const rows = document.querySelectorAll('#manageStudentTableBody tr');
   const toSave = [];
 
   rows.forEach(row => {
     if (row.id === 'no-managed-students-row') return;
     const name = row.querySelector('.student-name').value.trim();
-    if (name) toSave.push({ studentId: row.dataset.id, studentName: name, class: row.querySelector('.student-class').value.trim() });
+    if (name) toSave.push({ studentId: row.dataset.id || '', studentName: name, class: row.querySelector('.student-class').value.trim() });
   });
 
   if (!toSave.length) { showToast('No student data to save.', 'warning'); return; }
