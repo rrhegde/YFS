@@ -13,6 +13,23 @@
 <!-- Toast Container -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index:9999"></div>
 
+<!-- Custom Confirmation Modal -->
+<div class="confirm-modal-overlay" id="confirmModalOverlay">
+  <div class="confirm-modal">
+    <div class="confirm-modal-icon">
+      <i class="bi bi-exclamation-circle"></i>
+    </div>
+    <h4 id="confirmModalTitle">Confirm Action</h4>
+    <p id="confirmModalMessage">Are you sure?</p>
+    <div class="confirm-modal-buttons">
+      <button class="btn btn-danger" id="confirmModalYesBtn" onclick="handleConfirmModalYes()">
+        <i class="bi bi-trash me-1"></i>Delete
+      </button>
+      <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="d-flex" id="app-wrapper">
   <!-- Sidebar -->
   <nav class="sidebar" id="sidebar">
@@ -473,6 +490,30 @@ let geoData = { regions: [], chapters: {} };
 let mgmtData = { schools: [], volunteers: [], mappings: [] };
 
 // ═══════════════════════════════════════════════════════════
+//  CONFIRMATION MODAL
+// ═══════════════════════════════════════════════════════════
+let confirmModalCallback = null;
+
+function showConfirmModal(title, message, onConfirm) {
+  document.getElementById('confirmModalTitle').textContent = title;
+  document.getElementById('confirmModalMessage').textContent = message;
+  confirmModalCallback = onConfirm;
+  document.getElementById('confirmModalOverlay').classList.add('active');
+}
+
+function closeConfirmModal() {
+  document.getElementById('confirmModalOverlay').classList.remove('active');
+  confirmModalCallback = null;
+}
+
+function handleConfirmModalYes() {
+  if (confirmModalCallback) {
+    confirmModalCallback();
+  }
+  closeConfirmModal();
+}
+
+// ═══════════════════════════════════════════════════════════
 //  TOAST NOTIFICATION SYSTEM (replaces all alert() calls)
 // ═══════════════════════════════════════════════════════════
 function showToast(message, type = 'success', duration = 4000) {
@@ -557,6 +598,14 @@ function loadStoredLogo() {
 window.addEventListener('load', function() {
   setupLogoUpload();
   loadStoredLogo();
+  
+  // Close modal when clicking outside
+  document.getElementById('confirmModalOverlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('confirmModalOverlay')) {
+      closeConfirmModal();
+    }
+  });
+  
   switchView('loadingView');
   google.script.run.withSuccessHandler(handleUserAuth).withFailureHandler(showError).getUserDetails();
 });
@@ -990,22 +1039,34 @@ function handleAddSchool(btn) {
 }
 
 function handleDeleteSchool(schoolId, btn) {
-  if (!confirm('Delete this school? This cannot be undone.')) return;
-  btn.disabled = true;
-  google.script.run
-    .withSuccessHandler(res => {
-      if (res.success) {
-        mgmtData.schools = mgmtData.schools.filter(s => s.id !== schoolId);
-        renderSchoolsTable(mgmtData.schools);
-        refreshSchoolSelects();
-        showToast('School deleted.', 'success');
-      } else {
-        showToast(res.message || 'Could not delete.', 'danger');
-        btn.disabled = false;
-      }
-    })
-    .withFailureHandler(err => { showToast(err.message, 'danger'); btn.disabled = false; })
-    .deleteSchool(schoolId);
+  // Find school name for the modal
+  const school = mgmtData.schools.find(s => s.id === schoolId);
+  if (!school) return;
+  
+  showConfirmModal(
+    'Delete School',
+    `Are you sure you want to delete "${school.name}"? This action cannot be undone.`,
+    () => {
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res.success) {
+            mgmtData.schools = mgmtData.schools.filter(s => s.id !== schoolId);
+            renderSchoolsTable(mgmtData.schools);
+            refreshSchoolSelects();
+            showToast('School deleted successfully.', 'success');
+          } else {
+            showToast(res.message || 'Could not delete.', 'danger');
+            btn.disabled = false;
+          }
+        })
+        .withFailureHandler(err => { 
+          showToast(err.message, 'danger'); 
+          btn.disabled = false; 
+        })
+        .deleteSchool(schoolId);
+    }
+  );
 }
 
 function refreshSchoolSelects() {
@@ -1134,6 +1195,20 @@ function handleMapVolunteer(btn) {
   const schoolId = document.getElementById('mapSchoolSelect').value;
   if (!volunteerEmail || !schoolId) { showToast('Please select both a volunteer and a school.', 'warning'); return; }
 
+  // Check one-to-one mapping: volunteer already mapped to another school
+  const volunteerAlreadyMapped = mgmtData.mappings.find(m => m.volunteerEmail === volunteerEmail);
+  if (volunteerAlreadyMapped) {
+    showToast(`${volunteerAlreadyMapped.volunteerName} is already mapped to ${volunteerAlreadyMapped.schoolName}. Remove that mapping first.`, 'warning');
+    return;
+  }
+
+  // Check one-to-one mapping: school already mapped to another volunteer
+  const schoolAlreadyMapped = mgmtData.mappings.find(m => m.schoolId === schoolId);
+  if (schoolAlreadyMapped) {
+    showToast(`${schoolAlreadyMapped.schoolName} is already mapped to ${schoolAlreadyMapped.volunteerName}. Remove that mapping first.`, 'warning');
+    return;
+  }
+
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Mapping...';
 
@@ -1143,6 +1218,24 @@ function handleMapVolunteer(btn) {
         showToast(res.message, 'success');
         mgmtData.mappings.push(res.mapping);
         renderMappingsTable(mgmtData.mappings);
+        
+        // Remove from select lists after successful mapping
+        const volSel = document.getElementById('mapVolunteerSelect');
+        const schSel = document.getElementById('mapSchoolSelect');
+        
+        // Remove mapped volunteer option
+        Array.from(volSel.options).forEach((opt, idx) => {
+          if (opt.value === volunteerEmail) volSel.remove(idx);
+        });
+        
+        // Remove mapped school option
+        Array.from(schSel.options).forEach((opt, idx) => {
+          if (opt.value === schoolId) schSel.remove(idx);
+        });
+        
+        // Reset search inputs
+        document.getElementById('mapVolSearch').value = '';
+        document.getElementById('mapSchSearch').value = '';
       } else {
         showToast(res.message, 'warning');
       }
@@ -1158,22 +1251,57 @@ function handleMapVolunteer(btn) {
 }
 
 function handleDeleteMapping(mappingId, btn) {
-  if (!confirm('Remove this mapping?')) return;
-  btn.disabled = true;
-  google.script.run
-    .withSuccessHandler(res => {
-      if (res.success) {
-        document.getElementById('map-row-' + mappingId).remove();
-        mgmtData.mappings = mgmtData.mappings.filter(m => m.mappingId !== mappingId);
-        document.getElementById('mapCountBadge').textContent = mgmtData.mappings.length;
-        showToast('Mapping removed.', 'success');
-      } else {
-        showToast(res.message, 'danger');
-        btn.disabled = false;
-      }
-    })
-    .withFailureHandler(err => { showToast(err.message, 'danger'); btn.disabled = false; })
-    .deleteMapping(mappingId);
+  // Find mapping details for the modal
+  const mapping = mgmtData.mappings.find(m => m.mappingId === mappingId);
+  if (!mapping) return;
+  
+  showConfirmModal(
+    'Remove Mapping',
+    `Are you sure you want to remove "${mapping.volunteerName}" from "${mapping.schoolName}"?`,
+    () => {
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res.success) {
+            document.getElementById('map-row-' + mappingId).remove();
+            mgmtData.mappings = mgmtData.mappings.filter(m => m.mappingId !== mappingId);
+            document.getElementById('mapCountBadge').textContent = mgmtData.mappings.length;
+            
+            // Re-add to select lists for remapping
+            const volSel = document.getElementById('mapVolunteerSelect');
+            const schSel = document.getElementById('mapSchoolSelect');
+            
+            // Find the volunteer in the list and add back
+            const volunteer = mgmtData.volunteers.find(v => v.email === mapping.volunteerEmail);
+            if (volunteer) {
+              const optVol = document.createElement('option');
+              optVol.value = volunteer.email;
+              optVol.textContent = `${volunteer.name} (${volunteer.email})`;
+              volSel.appendChild(optVol);
+            }
+            
+            // Find the school in the list and add back
+            const school = mgmtData.schools.find(s => s.id === mapping.schoolId);
+            if (school) {
+              const optSch = document.createElement('option');
+              optSch.value = school.id;
+              optSch.textContent = school.name;
+              schSel.appendChild(optSch);
+            }
+            
+            showToast('Mapping removed. Volunteer and school are available for remapping.', 'success');
+          } else {
+            showToast(res.message, 'danger');
+            btn.disabled = false;
+          }
+        })
+        .withFailureHandler(err => { 
+          showToast(err.message, 'danger'); 
+          btn.disabled = false; 
+        })
+        .deleteMapping(mappingId);
+    }
+  );
 }
 
 // ─── Students ──────────────────────────────────────────────
