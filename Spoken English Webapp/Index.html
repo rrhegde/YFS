@@ -735,22 +735,26 @@ async function setupClassDropdown() {
 
   if (!schoolId) {
     classSelect.innerHTML = '<option value="">--Select Class--</option>';
-    classSelect.disabled = true; // Also disable if no school is selected
+    classSelect.disabled = true;
     return;
   }
   
-  // --- START: Provide immediate feedback ---
   classSelect.disabled = true;
   classSelect.innerHTML = '<option value="">Loading classes...</option>';
-  // --- END: Provide immediate feedback ---
 
   try {
-    const students = await gsRun('getStudentsForSchool', schoolId);
+    // Correct way to call the server using a Promise
+    const students = await new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        .getStudentsForSchool(schoolId);
+    });
+    
     const classesSet = new Set(students.map(s => s.class).filter(Boolean));
     
     if(classesSet.size === 0) {
       classSelect.innerHTML = '<option value="">No classes found</option>';
-      // Keep it disabled as there's nothing to select
       return; 
     }
 
@@ -761,8 +765,6 @@ async function setupClassDropdown() {
     showToast('Error loading classes: ' + err.message, 'danger');
     classSelect.innerHTML = '<option value="">Error fetching data</option>';
   } finally {
-    // Re-enable the dropdown once the process is complete (success or fail)
-    // unless there are no classes to select.
     if (classSelect.innerHTML.includes('No classes found')) {
       classSelect.disabled = true;
     } else {
@@ -785,27 +787,29 @@ async function loadStudentGrid() {
     return;
   }
 
-  const btn = event.target.closest('button'); // Get button reference
+  const btn = event.target.closest('button');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
   try {
-    const allStudents = await gsRun('getStudentsForSchool', schoolId);
-    
-    // ▼▼▼ THE FIX IS HERE ▼▼▼
-    // We convert both s.class and classFilter to strings to ensure a correct comparison.
+    // Correct server call #1
+    const allStudents = await new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getStudentsForSchool(schoolId);
+    });
     const students = allStudents.filter(s => String(s.class).trim() === String(classFilter).trim());
-    // ▲▲▲ THE FIX IS HERE ▲▲▲
-
+    
     if (!students.length) {
-      errDiv.innerHTML = `No students found in class "<strong>${escHtml(classFilter)}</strong>". Please check the student data or select another class.`;
+      errDiv.innerHTML = `No students found in class "<strong>${escHtml(classFilter)}</strong>".`;
       errDiv.style.display = 'block';
       return;
     }
     studentsList = students;
 
     if (assessmentType === 'Midline' || assessmentType === 'Endline') {
-      const existingTypes = await gsRun('getExistingAssessmentTypes', students[0].studentId);
+      // Correct server call #2
+      const existingTypes = await new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentTypes(students[0].studentId);
+      });
       if (assessmentType === 'Midline' && !existingTypes.includes('Baseline')) {
         errDiv.textContent = 'A Baseline assessment must be completed before a Midline can be entered.';
         errDiv.style.display = 'block';
@@ -818,54 +822,68 @@ async function loadStudentGrid() {
       }
     }
 
-    const kpis = await gsRun('getKpis');
+    // Correct server call #3
+    const kpis = await new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getKpis();
+    });
     kpiMaster = kpis;
     
-    const existingScores = {};
-    for (const student of students) {
-      const scores = await gsRun('getExistingAssessmentScores', student.studentId, assessmentType);
-      existingScores[student.studentId] = scores;
-    }
+    // Correct server call #4
+    const existingDataMap = await new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentDataForClass(schoolId, classFilter, assessmentType);
+    });
     
-    renderAssessmentGrid(students, kpis, existingScores);
+    renderAssessmentGrid(students, kpis, existingDataMap);
     document.getElementById('student-grid-container').style.display = 'block';
+
   } catch(err) {
-    showToast(err.message || 'Failed to load students.', 'danger');
+    showToast(err.message || 'Failed to load student data.', 'danger');
   } finally {
     btn.disabled = false;
-    // Restore original button content
     btn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Load'; 
   }
 }
 
-function renderAssessmentGrid(students, kpis, existingScores = {}) {
+function renderAssessmentGrid(students, kpis, existingDataMap = {}) {
   const head = document.getElementById('assessment-grid-head');
   const body = document.getElementById('assessment-grid-body');
-  let hHtml = '<tr><th>Student</th>';
-  kpis.forEach(k => hHtml += `<th class="text-center">${k.name}</th>`);
-  hHtml += '<th class="text-center">Attendance</th></tr>';
-  head.innerHTML = hHtml;
+  head.innerHTML = `<tr><th>Student</th>${kpis.map(k => `<th class="text-center">${k.name}</th>`).join('')}<th class="text-center">Attendance</th></tr>`;
 
-  let bHtml = '';
-  students.forEach(s => {
-    const scores = existingScores[s.studentId] || [];
-    const scoresByKpi = {};
-    scores.forEach(score => { scoresByKpi[score.kpiId] = score.score; });
-    const hasScores = scores.length > 0;
+  let bodyHtml = '';
+  students.forEach(student => {
+    const savedData = existingDataMap[student.studentId];
     
-    bHtml += `<tr data-studentid="${s.studentId}"><td>${s.studentName} <small class="text-muted">(Cls ${s.class})</small></td>`;
-    kpis.forEach(k => {
-      const value = scoresByKpi[k.id] || '';
-      bHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${k.id}" min="1" max="5" value="${value}" style="width:65px;margin:auto;"></td>`;
+    // Determine the status. Default to "Present" (i.e., NOT absent) if no saved data exists.
+    const isAbsent = savedData ? savedData.status === 'Absent' : false;
+    
+    const scoresByKpi = {};
+    if (savedData && savedData.scores) {
+      savedData.scores.forEach(score => { scoresByKpi[score.kpiId] = score.score; });
+    }
+
+    bodyHtml += `<tr data-studentid="${student.studentId}">
+        <td>${student.studentName} <small class="text-muted">(Cls ${student.class})</small></td>`;
+
+    kpis.forEach(kpi => {
+        const value = scoresByKpi[kpi.id] || '';
+        // Disable score inputs if the student was marked absent
+        const disabled = isAbsent ? 'disabled' : '';
+        bodyHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${kpi.id}" min="1" max="5" value="${value}" style="width:65px;margin:auto;" ${disabled}></td>`;
     });
-    bHtml += `<td class="text-center">
-      <div class="form-check form-switch d-flex justify-content-center">
-        <input class="form-check-input attendance-toggle" type="checkbox" role="switch" ${hasScores ? 'checked' : ''} onchange="toggleAttendance(this)" style="width:2.5em;height:1.3em;">
-      </div>
-      <small class="attendance-label ${hasScores ? 'text-success' : 'text-success'} fw-semibold">${hasScores ? 'Present' : 'Present'}</small>
+
+    // Conditionally set the toggle and label based on the 'isAbsent' status
+    const checked = !isAbsent ? 'checked' : '';
+    const labelClass = !isAbsent ? 'text-success' : 'text-danger';
+    const labelText = !isAbsent ? 'Present' : 'Absent';
+
+    bodyHtml += `<td class="text-center">
+        <div class="form-check form-switch d-flex justify-content-center">
+            <input class="form-check-input attendance-toggle" type="checkbox" role="switch" ${checked} onchange="toggleAttendance(this)" style="width:2.5em;height:1.3em;">
+        </div>
+        <small class="attendance-label ${labelClass} fw-semibold">${labelText}</small>
     </td></tr>`;
   });
-  body.innerHTML = bHtml;
+  body.innerHTML = bodyHtml;
 }
 
 function toggleAttendance(checkbox) {
@@ -1525,14 +1543,6 @@ function setupLiveSearch(searchId, selectId) {
     Array.from(select.options).forEach(opt => {
       opt.hidden = !opt.text.toLowerCase().includes(term);
     });
-  });
-}
-
-// Wrap google.script.run in a Promise for async/await
-function gsRun(fnName, ...args) {
-  return new Promise((resolve, reject) => {
-    let runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-    runner[fnName](...args);
   });
 }
 

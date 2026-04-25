@@ -118,6 +118,41 @@ function getExistingAssessmentScores(studentId, assessmentType) {
   return scores;
 }
 
+function getExistingAssessmentDataForClass(schoolId, classValue, assessmentType) {
+  const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+  const studentsData = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
+  
+  // Create a map of studentId to class for quick lookup
+  const studentClassMap = {};
+  for (let i = 1; i < studentsData.length; i++) {
+    if (studentsData[i][0] && studentsData[i][2] == schoolId) {
+      studentClassMap[studentsData[i][0]] = studentsData[i][3];
+    }
+  }
+  
+  // Create a map of student ID to their assessment data
+  const result = {};
+  for (let i = 1; i < data.length; i++) {
+    const studentId = data[i][1];
+    const schoolIdCol = data[i][2];
+    const typeCol = data[i][4];
+    const status = data[i][7];
+    
+    // Only include assessments for this school, class, and type
+    if (schoolIdCol == schoolId && typeCol === assessmentType && studentClassMap[studentId] == classValue) {
+      if (!result[studentId]) {
+        result[studentId] = { status: status, scores: [] };
+      }
+      
+      if (status === 'Present' && data[i][5]) {
+        result[studentId].scores.push({ kpiId: data[i][5], score: data[i][6] });
+      }
+    }
+  }
+  
+  return result;
+}
+
 function saveAssessments(assessmentData) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy. Please try again.' };
