@@ -158,6 +158,23 @@ function saveAssessments(assessmentData) {
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy. Please try again.' };
   try {
     const sheet = SS.getSheetByName(SHEETS.ASSESSMENTS);
+    const allData = sheet.getDataRange().getValues();
+    
+    // Collect all (studentId, schoolId, assessmentType) combinations to delete
+    const toDelete = new Set();
+    assessmentData.forEach(item => {
+      toDelete.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`);
+    });
+    
+    // Delete existing records for these combinations (iterate from bottom to top to avoid index shifting)
+    for (let i = allData.length - 1; i >= 1; i--) {
+      const key = `${allData[i][1]}|${allData[i][2]}|${allData[i][4]}`;
+      if (toDelete.has(key)) {
+        sheet.deleteRow(i + 1);
+      }
+    }
+    
+    // Now insert new data
     const ts = new Date();
     const email = Session.getActiveUser().getEmail();
     const rows = [];

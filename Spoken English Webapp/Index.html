@@ -545,18 +545,28 @@ function showToast(message, type = 'success', duration = 4000) {
     <div id="${id}" class="alert ${alertClass} d-flex align-items-center gap-2 py-3 px-4 shadow-sm" role="alert">
       <i class="bi ${icon} fs-5"></i>
       <span class="flex-grow-1">${message}</span>
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      <button type="button" class="btn-close" aria-label="Close"></button>
     </div>`;
   
   const container = document.getElementById('toastContainer');
   container.insertAdjacentHTML('beforeend', html);
   const alertEl = document.getElementById(id);
+  const closeBtn = alertEl.querySelector('.btn-close');
   
-  // Auto-hide after duration
-  setTimeout(() => {
+  // Close button click handler
+  closeBtn.addEventListener('click', () => {
     alertEl.style.opacity = '0';
     alertEl.style.transition = 'opacity 0.3s ease-out';
     setTimeout(() => alertEl.remove(), 300);
+  });
+  
+  // Auto-hide after duration
+  setTimeout(() => {
+    if (alertEl.parentElement) { // Check if element still exists (not manually closed)
+      alertEl.style.opacity = '0';
+      alertEl.style.transition = 'opacity 0.3s ease-out';
+      setTimeout(() => alertEl.remove(), 300);
+    }
   }, duration);
 }
 
@@ -709,7 +719,8 @@ function loadAssessmentView() {
         const sel = document.getElementById('schoolSelect');
         sel.innerHTML = '<option value="">--Select School--</option>';
         schools.forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
-        sel.onchange = setupClassDropdown;
+        sel.onchange = handleSchoolChange;
+        document.getElementById('classSelect').addEventListener('change', clearStudentGrid);
         switchView('assessmentView');
       })
       .withFailureHandler(showError)
@@ -721,12 +732,28 @@ function loadAssessmentView() {
         const sel = document.getElementById('schoolSelect');
         sel.innerHTML = '<option value="">--Select School--</option>';
         (data.schools || []).forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
-        sel.onchange = setupClassDropdown;
+        sel.onchange = handleSchoolChange;
+        document.getElementById('classSelect').addEventListener('change', clearStudentGrid);
         switchView('assessmentView');
       })
       .withFailureHandler(showError)
       .getDataForManagementView();
   }
+}
+
+function clearStudentGrid() {
+  document.getElementById('student-grid-container').style.display = 'none';
+  document.getElementById('assessment-grid-head').innerHTML = '';
+  document.getElementById('assessment-grid-body').innerHTML = '';
+  const errDiv = document.getElementById('validation-error');
+  errDiv.textContent = 'Please click Load to view students for the selected class';
+  errDiv.style.display = 'block';
+  studentsList = [];
+}
+
+function handleSchoolChange() {
+  clearStudentGrid();
+  setupClassDropdown();
 }
 
 async function setupClassDropdown() {
