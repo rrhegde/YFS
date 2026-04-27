@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --yfs-primary: #2563eb; --light-bg: #f8fafc; }
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, var(--light-bg) 0%, #f1f5f9 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .login-card {
+      max-width: 450px;
+      width: 100%;
+      border: none;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      animation: fadeIn 0.5s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    .form-control:focus {
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      border-color: var(--yfs-primary);
+    }
+    .btn-primary {
+      background: linear-gradient(90deg, var(--yfs-primary) 0%, #1d4ed8 100%);
+      border: none;
+      padding: 0.75rem;
+      font-weight: 600;
+    }
+    #logo { max-height: 80px; }
+  </style>
+</head>
+<body>
+  <div class="card login-card">
+    <div class="card-body p-5">
+      <div class="text-center mb-4">
+        <img id="logo" src="https://drive.google.com/uc?export=view&id=1lph3uQ19AhqxjMLipGJtLs-vHpT5-0c9" alt="NGO Logo">
+    </div>
+      <h4 class="card-title text-center mb-2 fw-bold">Spoken English Portal</h4>
+      <p class="text-center text-muted mb-4">Please sign in to continue</p>
+      
+      <div id="loginError" class="alert alert-danger" style="display:none;"></div>
+      
+      <form onsubmit="handleLogin(event)">
+        <div class="mb-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email" required>
+        </div>
+        <div class="mb-3">
+          <label for="pin" class="form-label">PIN</label>
+          <input type="password" class="form-control" id="pin" required>
+        </div>
+        <div class="d-grid mt-4">
+          <button type="submit" id="loginBtn" class="btn btn-primary">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Login
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script>
+  function handleLogin(event) {
+    event.preventDefault();
+    const email = document.getElementById('email').value;
+    const pin = document.getElementById('pin').value;
+    const errorDiv = document.getElementById('loginError');
+    const loginBtn = document.getElementById('loginBtn');
+    
+    errorDiv.style.display = 'none';
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Verifying...';
+
+    google.script.run
+      .withSuccessHandler(response => {
+        if (response.success) {
+          // On success, load the main app's HTML and replace the page
+          google.script.run
+            .withSuccessHandler(html => {
+              document.open();
+              document.write(html);
+              document.close();
+            })
+            .withFailureHandler(err => {
+              errorDiv.textContent = 'Could not load the application. ' + err.message;
+              errorDiv.style.display = 'block';
+            })
+            .loadMainApp(response.user); // Pass user data to the main app
+        } else {
+          errorDiv.textContent = response.message || 'Invalid email or PIN.';
+          errorDiv.style.display = 'block';
+          loginBtn.disabled = false;
+          loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Login';
+        }
+      })
+      .withFailureHandler(err => {
+        errorDiv.textContent = 'An error occurred: ' + err.message;
+        errorDiv.style.display = 'block';
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Login';
+      })
+      .verifyUserCredentials(email, pin);
+  }
+</script>
+</body>
+</html>

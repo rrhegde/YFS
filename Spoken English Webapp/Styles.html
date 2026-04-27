@@ -480,4 +480,52 @@
     color: var(--text-secondary);
     margin-top: 0.5rem;
   }
+
+  /* Add a simple top bar for the toggle button */
+.top-bar {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+}
+
+#sidebarCloseBtn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+}
+
+/* Collapsible Sidebar Styles */
+#app-wrapper.sidebar-collapsed .sidebar {
+    margin-left: calc(-1 * var(--sidebar-width));
+}
+
+#app-wrapper.sidebar-collapsed .main-content {
+    width: 100%;
+    margin-left: 0;
+}
+
+/* On larger screens, the toggle button is always visible */
+@media (min-width: 992px) {
+    #sidebarCloseBtn { display: none; }
+}
+
+/* On smaller screens, the sidebar overlays content */
+@media (max-width: 991.98px) {
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 1030;
+        margin-left: calc(-1 * var(--sidebar-width));
+    }
+    .main-content {
+        width: 100%;
+        margin-left: 0;
+    }
+    #app-wrapper.sidebar-collapsed .sidebar {
+        margin-left: 0;
+    }
+    #sidebarToggleBtn { display: none; } /* Hide the main toggle on small screens if you prefer */
+}
+
 </style>

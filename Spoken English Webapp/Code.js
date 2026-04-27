@@ -7,10 +7,84 @@ const SHEETS = {
   MAPPING: 'Mapping', STUDENTS: 'Students', KPI_MASTER: 'KPI_Master', ASSESSMENTS: 'Assessments'
 };
 
+/*function doGet(e) {
+  const htmlTemplate = HtmlService.createTemplateFromFile('LoginPage')
+  .evaluate()
+  .setTitle('YFS Spoken English Portal')
+  .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+}*/
+
 function doGet(e) {
+  Logger.log('doGet: Function started.'); // Log start
+  try {
+    const htmlTemplate = HtmlService.createTemplateFromFile('LoginPage');
+    Logger.log('doGet: Template created from LoginPage.html.'); // Log template creation
+    
+    const output = htmlTemplate.evaluate();
+    Logger.log('doGet: Template evaluated successfully.'); // Log successful evaluation
+    
+    output.setTitle('YFS Spoken English Portal Login');
+    output.addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    Logger.log('doGet: HTML output configured.'); // Log configuration
+    
+    return output;
+  } catch (error) {
+    Logger.log('doGet: Error caught: ' + error.message + ' Stack: ' + error.stack); // Log any error with stack trace
+    // IMPORTANT: For a deployed web app, the user will still see "script completed but did not return anything"
+    // but the error details will now be in your Apps Script logs.
+    throw error; // Re-throw the error to ensure it appears in the Apps Script Executions log
+  }
+}
+// This is called AFTER a successful login. It injects the user object into the main HTML.
+function loadMainApp(user) {
   const htmlTemplate = HtmlService.createTemplateFromFile('Index');
-  htmlTemplate.userEmail = Session.getActiveUser().getEmail();
-  return htmlTemplate.evaluate().setTitle('YFS Spoken English Portal').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  // Pass the server-verified user object to the main app template
+  htmlTemplate.user = JSON.stringify(user);
+  return htmlTemplate.evaluate().getContent();
+}
+
+// This checks BOTH 'Users' and 'Volunteers' sheets for a matching email and PIN.
+function verifyUserCredentials(email, pin) {
+  try {
+    const lowerEmail = email.toLowerCase().trim();
+
+    // Check Users sheet first (Admins, Supervisors, Coordinators)
+    const usersSheet = SS.getSheetByName(SHEETS.USERS);
+    const usersData = usersSheet.getDataRange().getValues();
+    for (let i = 1; i < usersData.length; i++) {
+      if (usersData[i][0].toLowerCase().trim() === lowerEmail && usersData[i][2].toString() === pin) {
+        const user = {
+          email: usersData[i][0],
+          role: usersData[i][1],
+          assignedRegion: usersData[i][3],
+          assignedChapter: usersData[i][4]
+        };
+        return { success: true, user: user };
+      }
+    }
+
+    // If not in Users, check Volunteers sheet
+    const volSheet = SS.getSheetByName(SHEETS.VOLUNTEERS);
+    const volData = volSheet.getDataRange().getValues();
+    for (let i = 1; i < volData.length; i++) {
+      if (volData[i][2].toLowerCase().trim() === lowerEmail && volData[i][3].toString() === pin) {
+        const user = {
+          email: volData[i][2],
+          role: 'Volunteer',
+          assignedRegion: volData[i][4],
+          assignedChapter: volData[i][5]
+        };
+        return { success: true, user: user };
+      }
+    }
+
+    // If no match found
+    return { success: false, message: 'Invalid email or PIN.' };
+
+  } catch (e) {
+    Logger.log(e);
+    return { success: false, message: 'Server error during authentication.' };
+  }
 }
 
 function include(filename) {
@@ -267,7 +341,14 @@ function addVolunteer(volunteerData) {
   const sheet = SS.getSheetByName(SHEETS.VOLUNTEERS);
   const newId = 'VOL-' + new Date().getTime();
   sheet.appendRow([newId, volunteerData.name, volunteerData.email, volunteerData.pin, volunteerData.region, volunteerData.chapter]);
-  return { success: true, message: 'Volunteer added successfully!', volunteer: { id: newId, name: volunteerData.name, email: volunteerData.email, region: volunteerData.region, chapter: volunteerData.chapter } };
+  
+    const emailResult = sendCredentialsEmail(volunteerData.email, volunteerData.name, volunteerData.pin, 'Volunteer');
+  
+  const message = emailResult.success 
+    ? 'Volunteer added and credentials sent successfully!'
+    : emailResult.message;
+
+  return { success: true, message: message, volunteer: { id: newId, name: volunteerData.name, email: volunteerData.email, region: volunteerData.region, chapter: volunteerData.chapter } };
 }
 
 function mapVolunteerToSchool(mappingData) {
@@ -440,6 +521,37 @@ function deleteStudent(studentId) {
     }
   }
   return { success: false, message: 'Student not found.' };
+}
+
+// --- NEW HELPER FUNCTION TO SEND EMAILS ---
+function sendCredentialsEmail(recipientEmail, name, pin, role) {
+  const subject = "Your YFS Spoken English Portal Credentials";
+  const webappUrl = ScriptApp.getService().getUrl();
+  
+  const body = `
+    <p>Hello ${name},</p>
+    <p>An account has been created for you for the YFS Spoken English Portal. Your role is: <strong>${role}</strong>.</p>
+    <p>Please use the following credentials to log in:</p>
+    <ul>
+      <li><strong>Email:</strong> ${recipientEmail}</li>
+      <li><strong>PIN:</strong> ${pin}</li>
+    </ul>
+    <p>You can access the portal here: <a href="${webappUrl}">${webappUrl}</a></p>
+    <p>Thank you for your contribution!</p>
+  `;
+  
+  try {
+    MailApp.sendEmail({
+      to: recipientEmail,
+      subject: subject,
+      htmlBody: body,
+      name: "YFS Portal" // Optional: Sender name
+    });
+    return { success: true };
+  } catch (e) {
+    Logger.log("Email failed to send for " + recipientEmail + ": " + e.message);
+    return { success: false, message: "Volunteer was added, but the credential email failed to send." };
+  }
 }
 
 function generateUniqueId() {

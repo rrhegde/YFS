@@ -9,6 +9,9 @@
   <?!= include('Styles'); ?>
 </head>
 <body>
+  <script type="text/json" id="userData">
+    <?!= user ?>
+  </script>
 
 <!-- Toast Container -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index:9999"></div>
@@ -35,15 +38,15 @@
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <a href="#" class="d-flex align-items-center text-decoration-none" onclick="switchView('dashboardView'); return false;">
-        <div class="logo-container file-input-wrapper">
-          <img id="sidebarLogo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' fill='%232563eb' viewBox='0 0 16 16'%3E%3Cpath d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z'/%3E%3C/svg%3E" class="logo-img" alt="Logo" title="Click to upload logo">
-          <input type="file" id="logoFileInput" accept="image/*" style="display:none;">
-        </div>
+      <div class="logo-container">
+        <img id="sidebarLogo" src="https://drive.google.com/uc?export=view&id=1lph3uQ19AhqxjMLipGJtLs-vHpT5-0c9" class="logo-img" alt="Logo">
+      </div>
         <div>
-          <div class="sidebar-brand">Spoken English</div>
+          <div class="sidebar-brand">Spoken English M&E</div>
           <div class="sidebar-subtitle">Portal</div>
         </div>
       </a>
+          <button class="btn btn-close-white d-lg-none" id="sidebarCloseBtn" onclick="toggleSidebar()"></button>
     </div>
     <div class="list-group list-group-flush mt-3">
       <a href="#" class="list-group-item list-group-item-action" onclick="switchView('dashboardView'); return false;" id="nav-dashboard">
@@ -64,6 +67,12 @@
 
   <!-- Page Content -->
   <main class="main-content flex-grow-1">
+    <div class="top-bar d-flex align-items-center p-2 shadow-sm bg-white">
+        <button class="btn btn-outline-secondary" id="sidebarToggleBtn" onclick="toggleSidebar()">
+            <i class="bi bi-list"></i>
+        </button>
+        <h5 class="ms-3 mb-0" id="currentViewTitle">Dashboard</h5>
+    </div>
     <div class="container-fluid p-4">
 
       <!-- Loading View -->
@@ -366,11 +375,11 @@
                     <div class="row g-3">
                       <div class="col-12">
                         <label class="form-label">Full Name <span class="text-danger">*</span></label>
-                        <input type="text" id="volunteerName" class="form-control" placeholder="e.g. Ravi Kumar">
+                        <input type="text" id="volunteerName" class="form-control" placeholder="e.g. Mohan Kumar">
                       </div>
                       <div class="col-12">
                         <label class="form-label">Email <span class="text-danger">*</span></label>
-                        <input type="email" id="volunteerEmail" class="form-control" placeholder="ravi@example.com">
+                        <input type="email" id="volunteerEmail" class="form-control" placeholder="mohankumar@example.com">
                       </div>
                       <div class="col-md-6">
                         <label class="form-label">PIN (4 digits) <span class="text-danger">*</span></label>
@@ -611,7 +620,7 @@ function loadStoredLogo() {
 // ═══════════════════════════════════════════════════════════
 //  INIT & AUTH
 // ═══════════════════════════════════════════════════════════
-window.addEventListener('load', function() {
+/*window.addEventListener('load', function() {
   setupLogoUpload();
   loadStoredLogo();
   
@@ -624,15 +633,49 @@ window.addEventListener('load', function() {
   
   switchView('loadingView');
   google.script.run.withSuccessHandler(handleUserAuth).withFailureHandler(showError).getUserDetails();
+}); */
+
+window.addEventListener('load', function() {
+  // --- THE NEW WAY TO GET USER DATA ---
+  const userDataElement = document.getElementById('userData');
+  if (userDataElement) {
+    try {
+      // Parse the user object passed from the server
+      const user = JSON.parse(userDataElement.textContent);
+      handleUserAuth(user);
+    } catch (e) {
+      showError({ message: 'Could not load user data.' });
+    }
+  } else {
+    showError({ message: 'User data not found. Please log in again.' });
+  }
+  // --- END OF NEW AUTH ---
+
+  // Setup other event listeners
+  setupLogoUpload();
+  loadStoredLogo();
+  document.getElementById('confirmModalOverlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('confirmModalOverlay')) {
+      closeConfirmModal();
+    }
+  });
 });
 
+// This function no longer calls the server, it just processes the data
 function handleUserAuth(user) {
+  if (!user || user.error) { showError(user ? user.error : 'Authentication failed.'); return; }
+  currentUser = user;
+  // No need to check for Unauthorized or PIN here, as that's handled by the login page
+  initializeApp(user);
+}
+
+/*function handleUserAuth(user) {
   if (!user || user.error) { showError(user ? user.error : 'Authentication failed.'); return; }
   currentUser = user;
   if (user.role === 'Unauthorized') { switchView('unauthorizedView'); return; }
   if (user.pinRequired) { switchView('pinView'); return; }
   initializeApp(user);
-}
+}*/
 
 function initializeApp(user) {
   document.getElementById('userEmail').textContent = user.email;
@@ -1651,6 +1694,10 @@ function setupLiveSearch(searchId, selectId) {
       opt.hidden = !opt.text.toLowerCase().includes(term);
     });
   });
+}
+
+function toggleSidebar() {
+  document.getElementById('app-wrapper').classList.toggle('sidebar-collapsed');
 }
 
 function escHtml(str) {
