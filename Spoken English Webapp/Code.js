@@ -294,10 +294,36 @@ function mapVolunteerToSchool(mappingData) {
   };
 }
 
+function canDeleteSchool(schoolId) {
+  // Check for students in this school
+  const studentsSheet = SS.getSheetByName(SHEETS.STUDENTS);
+  const studentsData = studentsSheet.getDataRange().getValues();
+  const hasStudents = studentsData.slice(1).some(r => r[2] === schoolId && r[0]); // Column 2 is SchoolID
+  if (hasStudents) {
+    return { canDelete: false, reason: 'Students exist for this school. Please delete all students first.' };
+  }
+
+  // Check for mappings
+  const mappingSheet = SS.getSheetByName(SHEETS.MAPPING);
+  const mappingData = mappingSheet.getDataRange().getValues();
+  const hasMappings = mappingData.slice(1).some(r => r[2] === schoolId && r[0]); // Column 2 is SchoolID
+  if (hasMappings) {
+    return { canDelete: false, reason: 'This school is mapped to a volunteer. Please remove the mapping first.' };
+  }
+
+  return { canDelete: true };
+}
+
 function deleteSchool(schoolId) {
   const email = Session.getActiveUser().getEmail();
   const user = getVerifiedUser(email);
   if (!user || !['Admin','Supervisor'].includes(user.role)) throw new Error('Authorization failed.');
+
+  // Check for child records
+  const validation = canDeleteSchool(schoolId);
+  if (!validation.canDelete) {
+    return { success: false, message: validation.reason };
+  }
 
   const sheet = SS.getSheetByName(SHEETS.SCHOOLS);
   const data = sheet.getDataRange().getValues();
@@ -320,6 +346,40 @@ function deleteMapping(mappingId) {
     if (data[i][0] === mappingId) { sheet.deleteRow(i + 1); return { success: true }; }
   }
   return { success: false, message: 'Mapping not found.' };
+}
+
+function canDeleteVolunteer(volunteerEmail) {
+  // Check for mappings for this volunteer
+  const mappingSheet = SS.getSheetByName(SHEETS.MAPPING);
+  const mappingData = mappingSheet.getDataRange().getValues();
+  const hasMappings = mappingData.slice(1).some(r => r[1] === volunteerEmail && r[0]); // Column 1 is VolunteerEmail
+  if (hasMappings) {
+    return { canDelete: false, reason: 'This volunteer is mapped to a school. Please remove the mapping first.' };
+  }
+
+  return { canDelete: true };
+}
+
+function deleteVolunteer(volunteerEmail) {
+  const email = Session.getActiveUser().getEmail();
+  const user = getVerifiedUser(email);
+  if (!user || !['Admin','Supervisor'].includes(user.role)) throw new Error('Authorization failed.');
+
+  // Check for child records
+  const validation = canDeleteVolunteer(volunteerEmail);
+  if (!validation.canDelete) {
+    return { success: false, message: validation.reason };
+  }
+
+  const sheet = SS.getSheetByName(SHEETS.VOLUNTEERS);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][2] === volunteerEmail) { // Column 2 is Email
+      sheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false, message: 'Volunteer not found.' };
 }
 
 function saveOrUpdateStudents(students, schoolId) {
@@ -352,7 +412,25 @@ function saveOrUpdateStudents(students, schoolId) {
   finally { lock.releaseLock(); }
 }
 
+function canDeleteStudent(studentId) {
+  // Check for assessments for this student
+  const assessmentsSheet = SS.getSheetByName(SHEETS.ASSESSMENTS);
+  const assessmentsData = assessmentsSheet.getDataRange().getValues();
+  const hasAssessments = assessmentsData.slice(1).some(r => r[1] === studentId && r[0]); // Column 1 is StudentID
+  if (hasAssessments) {
+    return { canDelete: false, reason: 'Assessment records exist for this student. Please delete assessment records first.' };
+  }
+
+  return { canDelete: true };
+}
+
 function deleteStudent(studentId) {
+  // Check for child records
+  const validation = canDeleteStudent(studentId);
+  if (!validation.canDelete) {
+    return { success: false, message: validation.reason };
+  }
+
   const sheet = SS.getSheetByName(SHEETS.STUDENTS);
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {

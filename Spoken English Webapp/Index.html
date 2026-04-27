@@ -405,10 +405,10 @@
                     <div class="table-responsive" style="max-height:380px; overflow-y:auto;">
                       <table class="table table-sm table-hover align-middle">
                         <thead class="table-light sticky-top">
-                          <tr><th>Name</th><th>Email</th><th>Chapter</th></tr>
+                          <tr><th>Name</th><th>Email</th><th>Chapter</th><th class="text-center">Del</th></tr>
                         </thead>
                         <tbody id="volunteersTableBody">
-                          <tr><td colspan="3" class="text-center text-muted p-3">No volunteers loaded yet.</td></tr>
+                          <tr><td colspan="4" class="text-center text-muted p-3">No volunteers loaded yet.</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -523,7 +523,6 @@ function handleConfirmModalYes() {
 //  TOAST NOTIFICATION SYSTEM (replaces all alert() calls)
 // ═══════════════════════════════════════════════════════════
 function showToast(message, type = 'success', duration = 4000) {
-  // Map types to Bootstrap alert classes
   const alertTypes = { 
     success: 'alert-success', 
     danger: 'alert-danger', 
@@ -542,7 +541,7 @@ function showToast(message, type = 'success', duration = 4000) {
   const icon = icons[type] || icons.info;
   
   const html = `
-    <div id="${id}" class="alert ${alertClass} d-flex align-items-center gap-2 py-3 px-4 shadow-sm" role="alert">
+    <div id="${id}" class="alert ${alertClass} d-flex align-items-center gap-2 py-3 px-4 shadow-sm fade show" role="alert">
       <i class="bi ${icon} fs-5"></i>
       <span class="flex-grow-1">${message}</span>
       <button type="button" class="btn-close" aria-label="Close"></button>
@@ -550,24 +549,25 @@ function showToast(message, type = 'success', duration = 4000) {
   
   const container = document.getElementById('toastContainer');
   container.insertAdjacentHTML('beforeend', html);
+  
   const alertEl = document.getElementById(id);
-  const closeBtn = alertEl.querySelector('.btn-close');
   
-  // Close button click handler
-  closeBtn.addEventListener('click', () => {
-    alertEl.style.opacity = '0';
-    alertEl.style.transition = 'opacity 0.3s ease-out';
-    setTimeout(() => alertEl.remove(), 300);
-  });
-  
-  // Auto-hide after duration
-  setTimeout(() => {
-    if (alertEl.parentElement) { // Check if element still exists (not manually closed)
+  // Internal helper to hide and remove
+  const removeAlert = () => {
+    if (alertEl && alertEl.parentNode) {
+      alertEl.classList.remove('show'); // Bootstrap's way
       alertEl.style.opacity = '0';
-      alertEl.style.transition = 'opacity 0.3s ease-out';
       setTimeout(() => alertEl.remove(), 300);
     }
-  }, duration);
+  };
+
+  // Close button handler
+  alertEl.querySelector('.btn-close').addEventListener('click', removeAlert);
+  
+  // Auto-hide
+  if (duration > 0) {
+    setTimeout(removeAlert, duration);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1169,30 +1169,42 @@ function handleDeleteSchool(schoolId, btn) {
   const school = mgmtData.schools.find(s => s.id === schoolId);
   if (!school) return;
   
-  showConfirmModal(
-    'Delete School',
-    `Are you sure you want to delete "${school.name}"? This action cannot be undone.`,
-    () => {
-      btn.disabled = true;
-      google.script.run
-        .withSuccessHandler(res => {
-          if (res.success) {
-            mgmtData.schools = mgmtData.schools.filter(s => s.id !== schoolId);
-            renderSchoolsTable(mgmtData.schools);
-            refreshSchoolSelects();
-            showToast('School deleted successfully.', 'success');
-          } else {
-            showToast(res.message || 'Could not delete.', 'danger');
-            btn.disabled = false;
-          }
-        })
-        .withFailureHandler(err => { 
-          showToast(err.message, 'danger'); 
-          btn.disabled = false; 
-        })
-        .deleteSchool(schoolId);
-    }
-  );
+  // Check for child records before showing confirmation
+  google.script.run
+    .withSuccessHandler(validation => {
+      if (!validation.canDelete) {
+        showToast(validation.reason, 'warning');
+        return;
+      }
+      
+      // If validation passes, show confirmation modal
+      showConfirmModal(
+        'Delete School',
+        `Are you sure you want to delete "${school.name}"? This action cannot be undone.`,
+        () => {
+          btn.disabled = true;
+          google.script.run
+            .withSuccessHandler(res => {
+              if (res.success) {
+                mgmtData.schools = mgmtData.schools.filter(s => s.id !== schoolId);
+                renderSchoolsTable(mgmtData.schools);
+                refreshSchoolSelects();
+                showToast('School deleted successfully.', 'success');
+              } else {
+                showToast(res.message || 'Could not delete.', 'danger');
+                btn.disabled = false;
+              }
+            })
+            .withFailureHandler(err => { 
+              showToast(err.message, 'danger'); 
+              btn.disabled = false; 
+            })
+            .deleteSchool(schoolId);
+        }
+      );
+    })
+    .withFailureHandler(err => showToast('Validation error: ' + err.message, 'danger'))
+    .canDeleteSchool(schoolId);
 }
 
 function refreshSchoolSelects() {
@@ -1212,7 +1224,7 @@ function renderVolunteersTable(volunteers) {
   const body = document.getElementById('volunteersTableBody');
   document.getElementById('volCountBadge').textContent = volunteers.length;
   if (!volunteers.length) {
-    body.innerHTML = '<tr><td colspan="3" class="text-center text-muted p-3">No volunteers yet.</td></tr>';
+    body.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-3">No volunteers yet.</td></tr>';
     return;
   }
   body.innerHTML = volunteers.map(v => `
@@ -1220,6 +1232,11 @@ function renderVolunteersTable(volunteers) {
       <td><div class="fw-semibold">${escHtml(v.name)}</div></td>
       <td><small class="text-muted">${escHtml(v.email)}</small></td>
       <td>${escHtml(v.chapter||'')}</td>
+      <td class="text-center">
+        <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteVolunteer('${escHtml(v.email)}', this)" title="Delete volunteer">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
     </tr>`).join('');
 
   const searchEl = document.getElementById('volTableSearch');
@@ -1281,6 +1298,56 @@ function handleAddVolunteer(btn) {
       btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
     })
     .addVolunteer({ name, email, pin, region, chapter });
+}
+
+function handleDeleteVolunteer(volunteerEmail, btn) {
+  // Find volunteer name for the modal
+  const volunteer = mgmtData.volunteers.find(v => v.email === volunteerEmail);
+  if (!volunteer) return;
+  
+  // Check for child records before showing confirmation
+  google.script.run
+    .withSuccessHandler(validation => {
+      if (!validation.canDelete) {
+        showToast(validation.reason, 'warning');
+        return;
+      }
+      
+      // If validation passes, show confirmation modal
+      showConfirmModal(
+        'Delete Volunteer',
+        `Are you sure you want to delete "${volunteer.name} (${volunteer.email})"? This action cannot be undone.`,
+        () => {
+          btn.disabled = true;
+          google.script.run
+            .withSuccessHandler(res => {
+              if (res.success) {
+                mgmtData.volunteers = mgmtData.volunteers.filter(v => v.email !== volunteerEmail);
+                renderVolunteersTable(mgmtData.volunteers);
+                // Re-add to mapping select if it exists
+                const volSel = document.getElementById('mapVolunteerSelect');
+                if (volSel) {
+                  const optVol = document.createElement('option');
+                  optVol.value = volunteer.email;
+                  optVol.textContent = `${volunteer.name} (${volunteer.email})`;
+                  volSel.appendChild(optVol);
+                }
+                showToast('Volunteer deleted successfully.', 'success');
+              } else {
+                showToast(res.message || 'Could not delete volunteer.', 'danger');
+                btn.disabled = false;
+              }
+            })
+            .withFailureHandler(err => { 
+              showToast(err.message, 'danger'); 
+              btn.disabled = false; 
+            })
+            .deleteVolunteer(volunteerEmail);
+        }
+      );
+    })
+    .withFailureHandler(err => showToast('Validation error: ' + err.message, 'danger'))
+    .canDeleteVolunteer(volunteerEmail);
 }
 
 // ─── Mappings Table ────────────────────────────────────────
@@ -1499,29 +1566,42 @@ function handleDeleteStudent(studentId, btn) {
   const row = btn.closest('tr');
   const studentName = row.querySelector('.student-name').value;
   
-  showConfirmModal(
-    'Delete Student',
-    `Are you sure you want to delete "${escHtml(studentName)}"? This action cannot be undone.`,
-    () => {
-      btn.disabled = true;
-      google.script.run
-        .withSuccessHandler(res => {
-          if (res.success) {
-            row.remove();
-            showToast('Student deleted successfully.', 'success');
-          } else {
-            showToast(res.message || 'Could not delete student.', 'danger');
-            btn.disabled = false;
-          }
-        })
-        .withFailureHandler(err => {
-          showToast(err.message, 'danger');
-          btn.disabled = false;
-        })
-        .deleteStudent(studentId);
-    }
-  );
+  // Check for child records before showing confirmation
+  google.script.run
+    .withSuccessHandler(validation => {
+      if (!validation.canDelete) {
+        showToast(validation.reason, 'warning');
+        return;
+      }
+      
+      // If validation passes, show confirmation modal
+      showConfirmModal(
+        'Delete Student',
+        `Are you sure you want to delete "${escHtml(studentName)}"? This action cannot be undone.`,
+        () => {
+          btn.disabled = true;
+          google.script.run
+            .withSuccessHandler(res => {
+              if (res.success) {
+                row.remove();
+                showToast('Student deleted successfully.', 'success');
+              } else {
+                showToast(res.message || 'Could not delete student.', 'danger');
+                btn.disabled = false;
+              }
+            })
+            .withFailureHandler(err => {
+              showToast(err.message, 'danger');
+              btn.disabled = false;
+            })
+            .deleteStudent(studentId);
+        }
+      );
+    })
+    .withFailureHandler(err => showToast('Validation error: ' + err.message, 'danger'))
+    .canDeleteStudent(studentId);
 }
+
 
 function saveManagedStudents(btn) {
   const schoolId = document.getElementById('manageSchoolSelect').value;
