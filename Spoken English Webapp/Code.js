@@ -14,6 +14,7 @@ const SHEETS = {
   .addMetaTag('viewport', 'width=device-width, initial-scale=1')
 }*/
 
+// @ts-ignore
 function doGet(e) {
   Logger.log('doGet: Function started.'); // Log start
   try {
@@ -29,6 +30,7 @@ function doGet(e) {
     
     return output;
   } catch (error) {
+    // @ts-ignore
     Logger.log('doGet: Error caught: ' + error.message + ' Stack: ' + error.stack); // Log any error with stack trace
     // IMPORTANT: For a deployed web app, the user will still see "script completed but did not return anything"
     // but the error details will now be in your Apps Script logs.
@@ -36,6 +38,7 @@ function doGet(e) {
   }
 }
 // This is called AFTER a successful login. It injects the user object into the main HTML.
+// @ts-ignore
 function loadMainApp(user) {
   const htmlTemplate = HtmlService.createTemplateFromFile('Index');
   // Pass the server-verified user object to the main app template
@@ -44,6 +47,7 @@ function loadMainApp(user) {
 }
 
 // This checks BOTH 'Users' and 'Volunteers' sheets for a matching email and PIN.
+// @ts-ignore
 function verifyUserCredentials(email, pin) {
   try {
     const lowerEmail = email.toLowerCase().trim();
@@ -339,16 +343,28 @@ function addVolunteer(volunteerData) {
   if (user.role === 'Supervisor') { volunteerData.region = user.assignedRegion; volunteerData.chapter = user.assignedChapter; }
 
   const sheet = SS.getSheetByName(SHEETS.VOLUNTEERS);
+  
+  // Check for duplicate email before adding
+  const existingData = sheet.getDataRange().getValues();
+  const isDuplicate = existingData.some(row => row[2].toLowerCase() === volunteerData.email.toLowerCase());
+  if (isDuplicate) {
+    return { success: false, message: `A volunteer with the email ${volunteerData.email} already exists.` };
+  }
+
   const newId = 'VOL-' + new Date().getTime();
   sheet.appendRow([newId, volunteerData.name, volunteerData.email, volunteerData.pin, volunteerData.region, volunteerData.chapter]);
   
-    const emailResult = sendCredentialsEmail(volunteerData.email, volunteerData.name, volunteerData.pin, 'Volunteer');
+  // We NO LONGER send the email here. We return the new volunteer's data to the client.
+  const newVolunteer = { 
+    id: newId, 
+    name: volunteerData.name, 
+    email: volunteerData.email, 
+    pin: volunteerData.pin, // Send pin back to client for the email function
+    region: volunteerData.region, 
+    chapter: volunteerData.chapter 
+  };
   
-  const message = emailResult.success 
-    ? 'Volunteer added and credentials sent successfully!'
-    : emailResult.message;
-
-  return { success: true, message: message, volunteer: { id: newId, name: volunteerData.name, email: volunteerData.email, region: volunteerData.region, chapter: volunteerData.chapter } };
+  return { success: true, message: 'Volunteer added successfully!', volunteer: newVolunteer };
 }
 
 function mapVolunteerToSchool(mappingData) {
@@ -468,6 +484,7 @@ function saveOrUpdateStudents(students, schoolId) {
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy, please try again.' };
   try {
     const sheet = SS.getSheetByName(SHEETS.STUDENTS);
+    // @ts-ignore
     const all = sheet.getDataRange().getValues();
     const headers = all.shift();
     const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class');
@@ -521,6 +538,17 @@ function deleteStudent(studentId) {
     }
   }
   return { success: false, message: 'Student not found.' };
+}
+
+function sendVolunteerCredentials(volunteerData) {
+  // We re-verify the user is an Admin/Supervisor before sending an email
+  const email = Session.getActiveUser().getEmail();
+  const user = getVerifiedUser(email);
+  if (!user || !['Admin','Supervisor'].includes(user.role)) {
+    throw new Error('Authorization failed. You cannot send credential emails.');
+  }
+
+  return sendCredentialsEmail(volunteerData.email, volunteerData.name, volunteerData.pin, 'Volunteer');
 }
 
 // --- NEW HELPER FUNCTION TO SEND EMAILS ---

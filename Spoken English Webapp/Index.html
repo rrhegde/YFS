@@ -1314,12 +1314,17 @@ function handleAddVolunteer(btn) {
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
+  const volunteerData = { name, email, pin, region, chapter };
 
+   // --- Step 1: Call the server to ADD the volunteer ---
   google.script.run
     .withSuccessHandler(res => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
+
       if (res.success) {
         showToast(res.message, 'success');
-        mgmtData.volunteers.push(res.volunteer);
+        mgmtData.volunteers.push(res.volunteer); // "Volunteer added successfully!"
         renderVolunteersTable(mgmtData.volunteers);
         const volSel = document.getElementById('mapVolunteerSelect');
         volSel.innerHTML += `<option value="${res.volunteer.email}">${res.volunteer.name} (${res.volunteer.email})</option>`;
@@ -1329,7 +1334,53 @@ function handleAddVolunteer(btn) {
           document.getElementById('volunteerChapter').innerHTML = '<option value="">--Select Region first--</option>';
           document.getElementById('volunteerChapter').disabled = true;
         }
+
+         // --- Step 2: Show confirmation popup to SEND the email ---
+        showConfirmModal(
+          'Send Credentials',
+          `Do you want to send the login credentials to ${res.volunteer.name} (${res.volunteer.email})?`,
+          () => { // This is the 'onConfirm' callback function
+            const yesBtn = document.getElementById('confirmModalYesBtn');
+            const originalText = yesBtn.innerHTML;
+            yesBtn.disabled = true;
+            yesBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sending...';
+
+            // --- Step 3: Call the server AGAIN to SEND the email ---
+            google.script.run
+              .withSuccessHandler(emailRes => {
+                if (emailRes.success) {
+                  showToast('Credentials sent successfully!', 'success');
+                } else {
+                  showToast(emailRes.message || 'Failed to send credentials.', 'danger');
+                }
+                yesBtn.disabled = false;
+                yesBtn.innerHTML = originalText;
+              })
+              .withFailureHandler(err => {
+                showToast(err.message, 'danger');
+                yesBtn.disabled = false;
+                yesBtn.innerHTML = originalText;
+              })
+              .sendVolunteerCredentials(res.volunteer); // Pass the new volunteer's data
+          }
+        );
+        // Customize the confirmation modal for this action
+        document.getElementById('confirmModalYesBtn').innerHTML = '<i class="bi bi-send me-1"></i>Yes, Send';
+        document.getElementById('confirmModalYesBtn').classList.remove('btn-danger');
+        document.getElementById('confirmModalYesBtn').classList.add('btn-success');
+        document.querySelector('#confirmModalOverlay .confirm-modal-icon i').className = 'bi bi-envelope-check';
       } else {
+        showToast(res.message, 'danger'); // e.g., "Volunteer already exists."
+      }
+    })
+    .withFailureHandler(err => {
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
+    })
+    .addVolunteer(volunteerData);
+}
+/*      } else {
         showToast(res.message, 'danger');
       }
       btn.disabled = false;
@@ -1341,7 +1392,7 @@ function handleAddVolunteer(btn) {
       btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
     })
     .addVolunteer({ name, email, pin, region, chapter });
-}
+}*/
 
 function handleDeleteVolunteer(volunteerEmail, btn) {
   // Find volunteer name for the modal
