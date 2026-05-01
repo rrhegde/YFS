@@ -75,22 +75,6 @@ function requireUser_(token) {
   return getSessionUser(token);
 }
 
-function attachScope_(user) {
-  const role = rowValue_([user.role], 0);
-  const assignedRegion = rowValue_([user.assignedRegion], 0);
-  const assignedChapter = rowValue_([user.assignedChapter], 0);
-  let scope = { level: 'none', region: '', chapter: '' };
-
-  if (role === 'Admin') {
-    scope = { level: 'global', region: '', chapter: '' };
-  } else if (role === 'Supervisor') {
-    scope = { level: 'region', region: assignedRegion, chapter: '' };
-  } else if (role === 'Coordinator' || role === 'Volunteer') {
-    scope = { level: 'chapter', region: assignedRegion, chapter: assignedChapter };
-  }
-
-  return Object.assign({}, user, { role, assignedRegion, assignedChapter, scope, pinRequired: false });
-}
 
 function normalizeEmail_(email) {
   return String(email || '').trim().toLowerCase();
@@ -151,32 +135,177 @@ function getVerifiedUser(email) {
   return null;
 }
 
-function isAdmin_(user) { return user && user.role === 'Admin'; }
-function isSupervisor_(user) { return user && user.role === 'Supervisor'; }
-function isCoordinator_(user) { return user && user.role === 'Coordinator'; }
-function isVolunteer_(user) { return user && user.role === 'Volunteer'; }
-function canManageVolunteers_(user) { return isAdmin_(user) || isSupervisor_(user) || isCoordinator_(user); }
-function canManageSchools_(user) { return isAdmin_(user) || isSupervisor_(user) || isCoordinator_(user) || isVolunteer_(user); }
-function canManageStudents_(user) { return canManageSchools_(user); }
+const ROLES = Object.freeze({
+  ADMIN: 'Admin',
+  SUPERVISOR: 'Supervisor',
+  COORDINATOR: 'Coordinator',
+  VOLUNTEER: 'Volunteer'
+});
 
-function schoolInScope_(row, user) {
-  if (user.scope && user.scope.level === 'global') return true;
-  if (user.scope && user.scope.level === 'region') return row[2] === user.scope.region;
-  if (user.scope && user.scope.level === 'chapter') return row[3] === user.scope.chapter;
+const SCOPE_LEVELS = Object.freeze({
+  GLOBAL: 'global',
+  REGION: 'region',
+  CHAPTER: 'chapter',
+  NONE: 'none'
+});
+
+function getRole_(user) {
+  return user ? rowValue_([user.role], 0) : '';
+}
+
+function hasRole_(user, roles) {
+  return roles.includes(getRole_(user));
+}
+
+function isAdmin_(user) { return hasRole_(user, [ROLES.ADMIN]); }
+function isSupervisor_(user) { return hasRole_(user, [ROLES.SUPERVISOR]); }
+function isCoordinator_(user) { return hasRole_(user, [ROLES.COORDINATOR]); }
+function isVolunteer_(user) { return hasRole_(user, [ROLES.VOLUNTEER]); }
+
+function getScopeForUser_(user) {
+  const role = getRole_(user);
+  const assignedRegion = rowValue_([user && user.assignedRegion], 0);
+  const assignedChapter = rowValue_([user && user.assignedChapter], 0);
+
+  if (role === ROLES.ADMIN) return { level: SCOPE_LEVELS.GLOBAL, region: '', chapter: '' };
+  if (role === ROLES.SUPERVISOR) return { level: SCOPE_LEVELS.REGION, region: assignedRegion, chapter: '' };
+  if (role === ROLES.COORDINATOR || role === ROLES.VOLUNTEER) {
+    return { level: SCOPE_LEVELS.CHAPTER, region: assignedRegion, chapter: assignedChapter };
+  }
+  return { level: SCOPE_LEVELS.NONE, region: '', chapter: '' };
+}
+
+function getPermissionsForUser_(user) {
+  const role = getRole_(user);
+  return {
+    canAssess: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
+    canViewManagement: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
+    canManageSchools: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
+    canManageStudents: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
+    canManageVolunteers: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR].includes(role),
+    canManageMappings: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR].includes(role)
+  };
+}
+
+function attachScope_(user) {
+  const role = getRole_(user);
+  const assignedRegion = rowValue_([user.assignedRegion], 0);
+  const assignedChapter = rowValue_([user.assignedChapter], 0);
+  const scopedUser = Object.assign({}, user, { role, assignedRegion, assignedChapter, pinRequired: false });
+  scopedUser.scope = getScopeForUser_(scopedUser);
+  scopedUser.permissions = getPermissionsForUser_(scopedUser);
+  return scopedUser;
+}
+
+function canAssess_(user) { return !!(user && user.permissions && user.permissions.canAssess); }
+function canViewManagement_(user) { return !!(user && user.permissions && user.permissions.canViewManagement); }
+function canManageSchools_(user) { return !!(user && user.permissions && user.permissions.canManageSchools); }
+function canManageStudents_(user) { return !!(user && user.permissions && user.permissions.canManageStudents); }
+function canManageVolunteers_(user) { return !!(user && user.permissions && user.permissions.canManageVolunteers); }
+function canManageMappings_(user) { return !!(user && user.permissions && user.permissions.canManageMappings); }
+
+function ensurePermission_(allowed, message) {
+  if (!allowed) throw new Error(message || 'Authorization failed.');
+}
+
+function isRowInScope_(user, region, chapter) {
+  const scope = user && user.scope ? user.scope : getScopeForUser_(user);
+  if (scope.level === SCOPE_LEVELS.GLOBAL) return true;
+  if (scope.level === SCOPE_LEVELS.REGION) return region === scope.region;
+  if (scope.level === SCOPE_LEVELS.CHAPTER) return chapter === scope.chapter;
   return false;
 }
 
+function schoolInScope_(row, user) {
+  return isRowInScope_(user, row[2], row[3]);
+}
+
 function volunteerInScope_(row, user) {
-  if (user.scope && user.scope.level === 'global') return true;
-  if (user.scope && user.scope.level === 'region') return row[4] === user.scope.region;
-  if (user.scope && user.scope.level === 'chapter') return row[5] === user.scope.chapter;
-  return false;
+  return isRowInScope_(user, row[4], row[5]);
+}
+
+function filterSchoolsByScope_(rows, user) {
+  return rows.filter(row => schoolInScope_(row, user));
+}
+
+function filterVolunteersByScope_(rows, user) {
+  return rows.filter(row => volunteerInScope_(row, user));
+}
+
+function mapSchoolRow_(row) {
+  return { id: row[0], name: row[1], region: row[2], chapter: row[3], taluk: row[4], district: row[5], strength: row[6] };
+}
+
+function mapVolunteerRow_(row) {
+  return { id: row[0], name: row[1], email: row[2], region: row[4], chapter: row[5] };
+}
+
+function getScopedSchoolIds_(schools) {
+  return new Set(schools.map(s => s.id));
+}
+
+function getMappedSchoolIdsForVolunteer_(volunteerEmail) {
+  const mappingRows = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
+  return new Set(
+    mappingRows
+      .slice(1)
+      .filter(row => normalizeEmail_(row[1]) === normalizeEmail_(volunteerEmail))
+      .map(row => row[2])
+      .filter(Boolean)
+  );
+}
+
+function filterSchoolsForUser_(rows, user) {
+  const scopedRows = filterSchoolsByScope_(rows, user);
+  if (!isVolunteer_(user)) return scopedRows;
+  const mappedSchoolIds = getMappedSchoolIdsForVolunteer_(user.email);
+  return scopedRows.filter(row => mappedSchoolIds.has(row[0]));
+}
+
+function applySchoolScopeDefaults_(user, schoolData) {
+  const data = Object.assign({}, schoolData);
+  const scope = user.scope;
+  if (scope.level === SCOPE_LEVELS.REGION) data.region = scope.region;
+  if (scope.level === SCOPE_LEVELS.CHAPTER) {
+    data.region = scope.region;
+    data.chapter = scope.chapter;
+  }
+  return data;
+}
+
+function applyVolunteerScopeDefaults_(user, volunteerData) {
+  const data = Object.assign({}, volunteerData);
+  const scope = user.scope;
+  if (scope.level === SCOPE_LEVELS.REGION) data.region = scope.region;
+  if (scope.level === SCOPE_LEVELS.CHAPTER) {
+    data.region = scope.region;
+    data.chapter = scope.chapter;
+  }
+  return data;
 }
 
 function ensureSchoolAccess_(user, schoolId) {
   const rows = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
   const row = rows.find(r => r[0] == schoolId);
   if (!row || !schoolInScope_(row, user)) throw new Error('You do not have access to this school.');
+  if (isVolunteer_(user) && !getMappedSchoolIdsForVolunteer_(user.email).has(row[0])) {
+    throw new Error('You do not have access to this school.');
+  }
+  return row;
+}
+
+function ensureVolunteerAccess_(user, volunteerEmail) {
+  const rows = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
+  const row = rows.find(r => normalizeEmail_(r[2]) === normalizeEmail_(volunteerEmail));
+  if (!row || !volunteerInScope_(row, user)) throw new Error('You do not have access to this volunteer.');
+  return row;
+}
+
+function ensureStudentAccess_(user, studentId) {
+  const rows = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
+  const row = rows.find(r => r[0] === studentId);
+  if (!row) throw new Error('Student not found.');
+  ensureSchoolAccess_(user, row[2]);
   return row;
 }
 
@@ -206,16 +335,17 @@ function getKpis(token) {
 
 function getMappedSchoolsForVolunteer(token, volunteerEmail) {
   const user = getSessionUser(token);
-  if (!canManageSchools_(user)) throw new Error('Authorization failed.');
-  volunteerEmail = volunteerEmail || user.email;
+  ensurePermission_(canAssess_(user), 'Authorization failed.');
+  volunteerEmail = isVolunteer_(user) ? user.email : (volunteerEmail || user.email);
   const mappingData = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
   const schoolsData = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
-  const ids = mappingData.slice(1).filter(r => normalizeEmail_(r[1]) === normalizeEmail_(volunteerEmail)).map(r => r[2]);
+  const ids = Array.from(getMappedSchoolIdsForVolunteer_(volunteerEmail));
   return schoolsData.slice(1).filter(r => ids.includes(r[0]) && schoolInScope_(r, user)).map(r => ({ id: r[0], name: r[1] }));
 }
 
 function getStudentsForSchool(token, schoolId) {
   const user = getSessionUser(token);
+  ensurePermission_(canAssess_(user) || canManageStudents_(user), 'Authorization failed.');
   ensureSchoolAccess_(user, schoolId);
   const data = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
   data.shift();
@@ -225,7 +355,9 @@ function getStudentsForSchool(token, schoolId) {
 function getStudentsBySchool(token, schoolId) { return getStudentsForSchool(token, schoolId); }
 
 function getExistingAssessmentTypes(token, studentId) {
-  getSessionUser(token);
+  const user = getSessionUser(token);
+  ensurePermission_(canAssess_(user), 'Authorization failed.');
+  ensureStudentAccess_(user, studentId);
   const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
   const types = new Set();
   for (let i = 1; i < data.length; i++) if (data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
@@ -233,7 +365,9 @@ function getExistingAssessmentTypes(token, studentId) {
 }
 
 function getExistingAssessmentScores(token, studentId, assessmentType) {
-  getSessionUser(token);
+  const user = getSessionUser(token);
+  ensurePermission_(canAssess_(user), 'Authorization failed.');
+  ensureStudentAccess_(user, studentId);
   const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
   const scores = [];
   for (let i = 1; i < data.length; i++) if (data[i][1] == studentId && data[i][4] === assessmentType && data[i][7] === 'Present') scores.push({ kpiId: data[i][5], score: data[i][6] });
@@ -260,6 +394,7 @@ function getExistingAssessmentDataForClass(token, schoolId, classValue, assessme
 
 function saveAssessments(token, assessmentData) {
   const user = getSessionUser(token);
+  ensurePermission_(canAssess_(user), 'Authorization failed.');
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy. Please try again.' };
   try {
@@ -286,22 +421,20 @@ function getDataForManagementView(token) {
   const schoolsRaw = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues(); schoolsRaw.shift();
   const volRaw = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues(); volRaw.shift();
   const mappingRaw = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues(); mappingRaw.shift();
-  const schools = schoolsRaw.filter(r => schoolInScope_(r, user)).map(r => ({ id: r[0], name: r[1], region: r[2], chapter: r[3], taluk: r[4], district: r[5], strength: r[6] }));
-  const volunteers = canManageVolunteers_(user) ? volRaw.filter(r => volunteerInScope_(r, user)).map(r => ({ id: r[0], name: r[1], email: r[2], region: r[4], chapter: r[5] })) : [];
+  ensurePermission_(canViewManagement_(user), 'Authorization failed.');
+  const schools = filterSchoolsForUser_(schoolsRaw, user).map(mapSchoolRow_);
+  const volunteers = canManageVolunteers_(user) ? filterVolunteersByScope_(volRaw, user).map(mapVolunteerRow_) : [];
   const schoolMap = {}; schoolsRaw.forEach(r => { schoolMap[r[0]] = r[1]; });
   const volMap = {}; volRaw.forEach(r => { volMap[r[2]] = r[1]; });
-  const scopedSchoolIds = new Set(schools.map(s => s.id));
+  const scopedSchoolIds = getScopedSchoolIds_(schools);
   const mappings = mappingRaw.filter(r => scopedSchoolIds.has(r[2])).map(r => ({ mappingId: r[0], volunteerEmail: r[1], volunteerName: volMap[r[1]] || r[1], schoolId: r[2], schoolName: schoolMap[r[2]] || r[2] }));
   return { user, schools, volunteers, mappings, geoData: getGeoData(token) };
 }
 
 function addSchool(token, schoolData) {
   const user = getSessionUser(token);
-  if (!canManageSchools_(user)) throw new Error('Authorization failed.');
-  if (!isAdmin_(user)) {
-    if (isSupervisor_(user)) schoolData.region = user.assignedRegion;
-    if (isCoordinator_(user) || isVolunteer_(user)) { schoolData.region = user.assignedRegion; schoolData.chapter = user.assignedChapter; }
-  }
+  ensurePermission_(canManageSchools_(user), 'Authorization failed.');
+  schoolData = applySchoolScopeDefaults_(user, schoolData);
   const sheet = SS.getSheetByName(SHEETS.SCHOOLS);
   const newId = 'SCH-' + new Date().getTime();
   sheet.appendRow([newId, schoolData.name, schoolData.region, schoolData.chapter, schoolData.taluk, schoolData.district, schoolData.strength]);
@@ -310,9 +443,8 @@ function addSchool(token, schoolData) {
 
 function addVolunteer(token, volunteerData) {
   const user = getSessionUser(token);
-  if (!canManageVolunteers_(user)) throw new Error('Authorization failed.');
-  if (isSupervisor_(user)) volunteerData.region = user.assignedRegion;
-  if (isCoordinator_(user)) { volunteerData.region = user.assignedRegion; volunteerData.chapter = user.assignedChapter; }
+  ensurePermission_(canManageVolunteers_(user), 'Authorization failed.');
+  volunteerData = applyVolunteerScopeDefaults_(user, volunteerData);
   const sheet = SS.getSheetByName(SHEETS.VOLUNTEERS);
   const newId = 'VOL-' + new Date().getTime();
   sheet.appendRow([newId, volunteerData.name, volunteerData.email, volunteerData.pin, volunteerData.region, volunteerData.chapter]);
@@ -321,11 +453,9 @@ function addVolunteer(token, volunteerData) {
 
 function mapVolunteerToSchool(token, mappingData) {
   const user = getSessionUser(token);
-  if (!canManageVolunteers_(user)) throw new Error('Authorization failed.');
+  ensurePermission_(canManageMappings_(user), 'Authorization failed.');
   ensureSchoolAccess_(user, mappingData.schoolId);
-  const volData = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
-  const volRow = volData.find(r => normalizeEmail_(r[2]) === normalizeEmail_(mappingData.volunteerEmail));
-  if (!volRow || !volunteerInScope_(volRow, user)) throw new Error('You do not have access to this volunteer.');
+  const volRow = ensureVolunteerAccess_(user, mappingData.volunteerEmail);
   const sheet = SS.getSheetByName(SHEETS.MAPPING);
   const existing = sheet.getDataRange().getValues();
   if (existing.some(r => r[1] === mappingData.volunteerEmail && r[2] === mappingData.schoolId)) return { success: false, message: 'This volunteer is already mapped to this school.' };
@@ -347,7 +477,7 @@ function canDeleteSchool(token, schoolId) {
 
 function deleteSchool(token, schoolId) {
   const user = getSessionUser(token);
-  if (!canManageSchools_(user)) throw new Error('Authorization failed.');
+  ensurePermission_(canManageSchools_(user), 'Authorization failed.');
   const validation = canDeleteSchool(token, schoolId);
   if (!validation.canDelete) return { success: false, message: validation.reason };
   const sheet = SS.getSheetByName(SHEETS.SCHOOLS);
@@ -358,7 +488,7 @@ function deleteSchool(token, schoolId) {
 
 function deleteMapping(token, mappingId) {
   const user = getSessionUser(token);
-  if (!canManageVolunteers_(user)) throw new Error('Authorization failed.');
+  ensurePermission_(canManageMappings_(user), 'Authorization failed.');
   const sheet = SS.getSheetByName(SHEETS.MAPPING);
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) if (data[i][0] === mappingId) { ensureSchoolAccess_(user, data[i][2]); sheet.deleteRow(i + 1); return { success: true }; }
@@ -367,10 +497,8 @@ function deleteMapping(token, mappingId) {
 
 function canDeleteVolunteer(token, volunteerEmail) {
   const user = getSessionUser(token);
-  if (!canManageVolunteers_(user)) throw new Error('Authorization failed.');
-  const volData = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
-  const volRow = volData.find(r => normalizeEmail_(r[2]) === normalizeEmail_(volunteerEmail));
-  if (!volRow || !volunteerInScope_(volRow, user)) throw new Error('You do not have access to this volunteer.');
+  ensurePermission_(canManageVolunteers_(user), 'Authorization failed.');
+  ensureVolunteerAccess_(user, volunteerEmail);
   const mappingData = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
   if (mappingData.slice(1).some(r => normalizeEmail_(r[1]) === normalizeEmail_(volunteerEmail) && r[0])) return { canDelete: false, reason: 'This volunteer is mapped to a school. Please remove the mapping first.' };
   return { canDelete: true };
@@ -387,7 +515,7 @@ function deleteVolunteer(token, volunteerEmail) {
 
 function saveOrUpdateStudents(token, students, schoolId) {
   const user = getSessionUser(token);
-  if (!canManageStudents_(user)) throw new Error('Authorization failed.');
+  ensurePermission_(canManageStudents_(user), 'Authorization failed.');
   ensureSchoolAccess_(user, schoolId);
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy, please try again.' };
@@ -417,7 +545,9 @@ function saveOrUpdateStudents(token, students, schoolId) {
 }
 
 function canDeleteStudent(token, studentId) {
-  getSessionUser(token);
+  const user = getSessionUser(token);
+  ensurePermission_(canManageStudents_(user), 'Authorization failed.');
+  ensureStudentAccess_(user, studentId);
   const assessmentsData = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
   if (assessmentsData.slice(1).some(r => r[1] === studentId && r[0])) return { canDelete: false, reason: 'Assessment records exist for this student. Please delete assessment records first.' };
   return { canDelete: true };
@@ -431,7 +561,6 @@ function deleteStudent(token, studentId) {
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === studentId) {
-      ensureSchoolAccess_(user, data[i][2]);
       sheet.deleteRow(i + 1);
       return { success: true };
     }

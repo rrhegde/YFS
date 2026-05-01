@@ -1036,6 +1036,7 @@ function setupManagementUI(data) {
 
 function setupGeoDropdowns(geo, user) {
   const isAdmin = user.role === 'Admin';
+  const isSupervisor = user.role === 'Supervisor';
 
   // School dropdowns
   const schRegion = document.getElementById('schoolRegion');
@@ -1044,37 +1045,52 @@ function setupGeoDropdowns(geo, user) {
   const volRegion = document.getElementById('volunteerRegion');
   const volChapter = document.getElementById('volunteerChapter');
 
-  if (!isAdmin) {
-    // Lock region/chapter for non-admin
-    schRegion.innerHTML = `<option value="${user.assignedRegion}">${user.assignedRegion}</option>`;
-    schRegion.disabled = true;
-    schChapter.innerHTML = `<option value="${user.assignedChapter}">${user.assignedChapter}</option>`;
-    schChapter.disabled = true;
-    volRegion.innerHTML = `<option value="${user.assignedRegion}">${user.assignedRegion}</option>`;
-    volRegion.disabled = true;
-    volChapter.innerHTML = `<option value="${user.assignedChapter}">${user.assignedChapter}</option>`;
-    volChapter.disabled = true;
-  } else {
-    // Populate from geoData
-    function populateRegion(sel, chapSel) {
-      sel.innerHTML = '<option value="">--Select Region--</option>';
-      geo.regions.forEach(r => sel.innerHTML += `<option value="${r}">${r}</option>`);
-      sel.onchange = function() {
-        chapSel.innerHTML = '<option value="">--Select Chapter--</option>';
-        chapSel.disabled = !this.value;
-        if (this.value && geo.chapters[this.value]) {
-          geo.chapters[this.value].forEach(c => chapSel.innerHTML += `<option value="${c}">${c}</option>`);
-        }
-      };
-    }
+  function populateRegion(sel, chapSel) {
+    sel.innerHTML = '<option value="">--Select Region--</option>';
+    geo.regions.forEach(r => sel.innerHTML += `<option value="${escHtml(r)}">${escHtml(r)}</option>`);
+    sel.onchange = function() {
+      populateChapters(chapSel, this.value, '');
+    };
+  }
+
+  function populateChapters(chapSel, region, selectedChapter) {
+    chapSel.innerHTML = '<option value="">--Select Chapter--</option>';
+    (geo.chapters[region] || []).forEach(c => {
+      const selected = c === selectedChapter ? 'selected' : '';
+      chapSel.innerHTML += `<option value="${escHtml(c)}" ${selected}>${escHtml(c)}</option>`;
+    });
+    chapSel.disabled = !region;
+  }
+
+  function lockRegionAllowChapter(regionSel, chapterSel) {
+    regionSel.innerHTML = `<option value="${escHtml(user.assignedRegion)}">${escHtml(user.assignedRegion)}</option>`;
+    regionSel.disabled = true;
+    populateChapters(chapterSel, user.assignedRegion, user.assignedChapter);
+    chapterSel.disabled = false;
+  }
+
+  function lockRegionAndChapter(regionSel, chapterSel) {
+    regionSel.innerHTML = `<option value="${escHtml(user.assignedRegion)}">${escHtml(user.assignedRegion)}</option>`;
+    regionSel.disabled = true;
+    chapterSel.innerHTML = `<option value="${escHtml(user.assignedChapter)}">${escHtml(user.assignedChapter)}</option>`;
+    chapterSel.disabled = true;
+  }
+
+  if (isAdmin) {
     populateRegion(schRegion, schChapter);
     populateRegion(volRegion, volChapter);
     schChapter.disabled = true;
     volChapter.disabled = true;
+  } else if (isSupervisor) {
+    lockRegionAllowChapter(schRegion, schChapter);
+    lockRegionAllowChapter(volRegion, volChapter);
+  } else {
+    lockRegionAndChapter(schRegion, schChapter);
+    lockRegionAndChapter(volRegion, volChapter);
   }
 }
 
-// â”€â”€â”€ Schools Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Schools Table
 function renderSchoolsTable(schools) {
   const body = document.getElementById('schoolsTableBody');
   document.getElementById('schoolCountBadge').textContent = schools.length;
