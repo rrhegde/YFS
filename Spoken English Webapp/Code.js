@@ -25,9 +25,10 @@ function verifyUserCredentials(email, pin) {
     pin = String(pin || '').trim();
     if (!email || !pin) return { success: false, message: 'Email and PIN are required.' };
 
-    const user = findUserByEmailAndPin_(email, pin);
+    let user = findUserByEmailAndPin_(email, pin);
     if (!user) return { success: false, message: 'Invalid email or PIN.' };
 
+    user = attachScope_(user);
     const token = createSession_(user);
     return { success: true, token, user };
   } catch (e) {
@@ -37,7 +38,7 @@ function verifyUserCredentials(email, pin) {
 }
 
 function loadMainApp(token) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   const htmlTemplate = HtmlService.createTemplateFromFile('Index');
   htmlTemplate.sessionToken = token;
   htmlTemplate.userJson = JSON.stringify(user).replace(/</g, '\\u003c');
@@ -46,7 +47,7 @@ function loadMainApp(token) {
 
 function getUserDetails(token) {
   try {
-    return requireUser_(token);
+    return getSessionUser(token);
   } catch (e) {
     return { role: 'Unauthorized', error: e.message };
   }
@@ -62,11 +63,33 @@ function createSession_(user) {
   return token;
 }
 
-function requireUser_(token) {
+function getSessionUser(token) {
   if (!token) throw new Error('Your session has expired. Please log in again.');
   const raw = CacheService.getScriptCache().get('session:' + token);
   if (!raw) throw new Error('Your session has expired. Please log in again.');
-  return JSON.parse(raw);
+  const user = JSON.parse(raw);
+  return user.scope ? user : attachScope_(user);
+}
+
+function requireUser_(token) {
+  return getSessionUser(token);
+}
+
+function attachScope_(user) {
+  const role = rowValue_([user.role], 0);
+  const assignedRegion = rowValue_([user.assignedRegion], 0);
+  const assignedChapter = rowValue_([user.assignedChapter], 0);
+  let scope = { level: 'none', region: '', chapter: '' };
+
+  if (role === 'Admin') {
+    scope = { level: 'global', region: '', chapter: '' };
+  } else if (role === 'Supervisor') {
+    scope = { level: 'region', region: assignedRegion, chapter: '' };
+  } else if (role === 'Coordinator' || role === 'Volunteer') {
+    scope = { level: 'chapter', region: assignedRegion, chapter: assignedChapter };
+  }
+
+  return Object.assign({}, user, { role, assignedRegion, assignedChapter, scope, pinRequired: false });
 }
 
 function normalizeEmail_(email) {
@@ -81,11 +104,12 @@ function findUserByEmailAndPin_(email, pin) {
   const usersData = SS.getSheetByName(SHEETS.USERS).getDataRange().getValues();
   for (let i = 1; i < usersData.length; i++) {
     const rowEmail = normalizeEmail_(usersData[i][0]);
+    const rowRole = rowValue_(usersData[i], 1);
     const rowPin = rowValue_(usersData[i], 2);
-    if (rowEmail === email && rowPin === pin) {
+    if (rowEmail === email && rowPin === pin && ['Admin', 'Supervisor', 'Coordinator'].includes(rowRole)) {
       return {
         email: rowValue_(usersData[i], 0),
-        role: rowValue_(usersData[i], 1),
+        role: rowRole,
         assignedRegion: rowValue_(usersData[i], 3),
         assignedChapter: rowValue_(usersData[i], 4),
         pinRequired: false
@@ -115,13 +139,13 @@ function getVerifiedUser(email) {
   const usersData = SS.getSheetByName(SHEETS.USERS).getDataRange().getValues();
   for (let i = 1; i < usersData.length; i++) {
     if (normalizeEmail_(usersData[i][0]) === email) {
-      return { email: rowValue_(usersData[i], 0), role: rowValue_(usersData[i], 1), assignedRegion: rowValue_(usersData[i], 3), assignedChapter: rowValue_(usersData[i], 4) };
+      return attachScope_({ email: rowValue_(usersData[i], 0), role: rowValue_(usersData[i], 1), assignedRegion: rowValue_(usersData[i], 3), assignedChapter: rowValue_(usersData[i], 4) });
     }
   }
   const volData = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
   for (let i = 1; i < volData.length; i++) {
     if (normalizeEmail_(volData[i][2]) === email) {
-      return { email: rowValue_(volData[i], 2), role: 'Volunteer', assignedRegion: rowValue_(volData[i], 4), assignedChapter: rowValue_(volData[i], 5) };
+      return attachScope_({ email: rowValue_(volData[i], 2), role: 'Volunteer', assignedRegion: rowValue_(volData[i], 4), assignedChapter: rowValue_(volData[i], 5) });
     }
   }
   return null;
@@ -136,15 +160,17 @@ function canManageSchools_(user) { return isAdmin_(user) || isSupervisor_(user) 
 function canManageStudents_(user) { return canManageSchools_(user); }
 
 function schoolInScope_(row, user) {
-  if (isAdmin_(user)) return true;
-  if (isSupervisor_(user)) return row[2] === user.assignedRegion;
-  return row[3] === user.assignedChapter;
+  if (user.scope && user.scope.level === 'global') return true;
+  if (user.scope && user.scope.level === 'region') return row[2] === user.scope.region;
+  if (user.scope && user.scope.level === 'chapter') return row[3] === user.scope.chapter;
+  return false;
 }
 
 function volunteerInScope_(row, user) {
-  if (isAdmin_(user)) return true;
-  if (isSupervisor_(user)) return row[4] === user.assignedRegion;
-  return row[5] === user.assignedChapter;
+  if (user.scope && user.scope.level === 'global') return true;
+  if (user.scope && user.scope.level === 'region') return row[4] === user.scope.region;
+  if (user.scope && user.scope.level === 'chapter') return row[5] === user.scope.chapter;
+  return false;
 }
 
 function ensureSchoolAccess_(user, schoolId) {
@@ -155,7 +181,7 @@ function ensureSchoolAccess_(user, schoolId) {
 }
 
 function getGeoData(token) {
-  requireUser_(token);
+  getSessionUser(token);
   const data = SS.getSheetByName(SHEETS.GEO).getDataRange().getValues();
   data.shift();
   const regionsSet = new Set();
@@ -172,14 +198,14 @@ function getGeoData(token) {
 }
 
 function getKpis(token) {
-  requireUser_(token);
+  getSessionUser(token);
   const data = SS.getSheetByName(SHEETS.KPI_MASTER).getDataRange().getValues();
   data.shift();
   return data.map(row => ({ id: row[0], name: row[1] })).filter(k => k.id || k.name);
 }
 
 function getMappedSchoolsForVolunteer(token, volunteerEmail) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   if (!canManageSchools_(user)) throw new Error('Authorization failed.');
   volunteerEmail = volunteerEmail || user.email;
   const mappingData = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
@@ -189,7 +215,7 @@ function getMappedSchoolsForVolunteer(token, volunteerEmail) {
 }
 
 function getStudentsForSchool(token, schoolId) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   ensureSchoolAccess_(user, schoolId);
   const data = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
   data.shift();
@@ -199,7 +225,7 @@ function getStudentsForSchool(token, schoolId) {
 function getStudentsBySchool(token, schoolId) { return getStudentsForSchool(token, schoolId); }
 
 function getExistingAssessmentTypes(token, studentId) {
-  requireUser_(token);
+  getSessionUser(token);
   const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
   const types = new Set();
   for (let i = 1; i < data.length; i++) if (data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
@@ -207,7 +233,7 @@ function getExistingAssessmentTypes(token, studentId) {
 }
 
 function getExistingAssessmentScores(token, studentId, assessmentType) {
-  requireUser_(token);
+  getSessionUser(token);
   const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
   const scores = [];
   for (let i = 1; i < data.length; i++) if (data[i][1] == studentId && data[i][4] === assessmentType && data[i][7] === 'Present') scores.push({ kpiId: data[i][5], score: data[i][6] });
@@ -215,7 +241,7 @@ function getExistingAssessmentScores(token, studentId, assessmentType) {
 }
 
 function getExistingAssessmentDataForClass(token, schoolId, classValue, assessmentType) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   ensureSchoolAccess_(user, schoolId);
   const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
   const studentsData = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
@@ -233,7 +259,7 @@ function getExistingAssessmentDataForClass(token, schoolId, classValue, assessme
 }
 
 function saveAssessments(token, assessmentData) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy. Please try again.' };
   try {
@@ -256,7 +282,7 @@ function saveAssessments(token, assessmentData) {
 }
 
 function getDataForManagementView(token) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   const schoolsRaw = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues(); schoolsRaw.shift();
   const volRaw = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues(); volRaw.shift();
   const mappingRaw = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues(); mappingRaw.shift();
@@ -270,7 +296,7 @@ function getDataForManagementView(token) {
 }
 
 function addSchool(token, schoolData) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   if (!canManageSchools_(user)) throw new Error('Authorization failed.');
   if (!isAdmin_(user)) {
     if (isSupervisor_(user)) schoolData.region = user.assignedRegion;
@@ -283,7 +309,7 @@ function addSchool(token, schoolData) {
 }
 
 function addVolunteer(token, volunteerData) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   if (!canManageVolunteers_(user)) throw new Error('Authorization failed.');
   if (isSupervisor_(user)) volunteerData.region = user.assignedRegion;
   if (isCoordinator_(user)) { volunteerData.region = user.assignedRegion; volunteerData.chapter = user.assignedChapter; }
@@ -294,7 +320,7 @@ function addVolunteer(token, volunteerData) {
 }
 
 function mapVolunteerToSchool(token, mappingData) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   if (!canManageVolunteers_(user)) throw new Error('Authorization failed.');
   ensureSchoolAccess_(user, mappingData.schoolId);
   const volData = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
@@ -310,7 +336,7 @@ function mapVolunteerToSchool(token, mappingData) {
 }
 
 function canDeleteSchool(token, schoolId) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   ensureSchoolAccess_(user, schoolId);
   const studentsData = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
   if (studentsData.slice(1).some(r => r[2] === schoolId && r[0])) return { canDelete: false, reason: 'Students exist for this school. Please delete all students first.' };
@@ -320,7 +346,7 @@ function canDeleteSchool(token, schoolId) {
 }
 
 function deleteSchool(token, schoolId) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   if (!canManageSchools_(user)) throw new Error('Authorization failed.');
   const validation = canDeleteSchool(token, schoolId);
   if (!validation.canDelete) return { success: false, message: validation.reason };
@@ -331,7 +357,7 @@ function deleteSchool(token, schoolId) {
 }
 
 function deleteMapping(token, mappingId) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   if (!canManageVolunteers_(user)) throw new Error('Authorization failed.');
   const sheet = SS.getSheetByName(SHEETS.MAPPING);
   const data = sheet.getDataRange().getValues();
@@ -340,7 +366,7 @@ function deleteMapping(token, mappingId) {
 }
 
 function canDeleteVolunteer(token, volunteerEmail) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   if (!canManageVolunteers_(user)) throw new Error('Authorization failed.');
   const volData = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
   const volRow = volData.find(r => normalizeEmail_(r[2]) === normalizeEmail_(volunteerEmail));
@@ -360,7 +386,7 @@ function deleteVolunteer(token, volunteerEmail) {
 }
 
 function saveOrUpdateStudents(token, students, schoolId) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   if (!canManageStudents_(user)) throw new Error('Authorization failed.');
   ensureSchoolAccess_(user, schoolId);
   const lock = LockService.getScriptLock();
@@ -391,14 +417,14 @@ function saveOrUpdateStudents(token, students, schoolId) {
 }
 
 function canDeleteStudent(token, studentId) {
-  requireUser_(token);
+  getSessionUser(token);
   const assessmentsData = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
   if (assessmentsData.slice(1).some(r => r[1] === studentId && r[0])) return { canDelete: false, reason: 'Assessment records exist for this student. Please delete assessment records first.' };
   return { canDelete: true };
 }
 
 function deleteStudent(token, studentId) {
-  const user = requireUser_(token);
+  const user = getSessionUser(token);
   const validation = canDeleteStudent(token, studentId);
   if (!validation.canDelete) return { success: false, message: validation.reason };
   const sheet = SS.getSheetByName(SHEETS.STUDENTS);
@@ -416,3 +442,4 @@ function deleteStudent(token, studentId) {
 function generateUniqueId() {
   return 'ID-' + new Date().getTime() + '-' + Math.random().toString(36).substr(2, 9);
 }
+

@@ -490,8 +490,8 @@
 //  GLOBAL STATE
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let currentUser = null;
-let sessionToken = '<?= sessionToken ?>';
-let bootstrappedUser = <?!= userJson ?>;
+let sessionToken = '<?= sessionToken ?>' || sessionStorage.getItem('yfsSessionToken') || '';
+let bootstrappedUser = <?!= userJson ?> || JSON.parse(sessionStorage.getItem('yfsSessionUser') || 'null');
 let kpiMaster = [];
 let studentsList = [];
 let geoData = { regions: [], chapters: {} };
@@ -625,7 +625,13 @@ window.addEventListener('load', function() {
   });
   
   switchView('loadingView');
-  if (sessionToken && bootstrappedUser) { handleUserAuth(bootstrappedUser); } else { showError('Missing login session. Please log in again.'); }
+  if (sessionToken && bootstrappedUser) {
+    sessionStorage.setItem('yfsSessionToken', sessionToken);
+    sessionStorage.setItem('yfsSessionUser', JSON.stringify(bootstrappedUser));
+    handleUserAuth(bootstrappedUser);
+  } else {
+    showError('Missing login session. Please log in again.');
+  }
 });
 
 function handleUserAuth(user) {
