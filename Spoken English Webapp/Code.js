@@ -572,3 +572,101 @@ function generateUniqueId() {
   return 'ID-' + new Date().getTime() + '-' + Math.random().toString(36).substr(2, 9);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  OPTIMIZED DATA LOADING
+// ─────────────────────────────────────────────────────────────────────────────
+const CACHE_VERSION = '1.0';
+
+function getDashboardStats(user) {
+  try {
+    const schoolsData = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
+    const studentsData = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
+    const assessmentsData = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+    
+    const scopedSchools = filterSchoolsByScope_(schoolsData.slice(1), user);
+    const scopedSchoolIds = new Set(scopedSchools.map(s => s[0]));
+    const scopedStudents = studentsData.slice(1).filter(r => scopedSchoolIds.has(r[2]));
+    const scopedAssessments = assessmentsData.slice(1).filter(r => scopedSchoolIds.has(r[2]));
+    
+    return {
+      totalSchools: scopedSchools.length,
+      totalStudents: scopedStudents.length,
+      totalAssessments: scopedAssessments.length
+    };
+  } catch (e) {
+    Logger.log('Error computing dashboard stats: ' + e);
+    return { totalSchools: 0, totalStudents: 0, totalAssessments: 0 };
+  }
+}
+
+function getAppData(sessionToken) {
+  try {
+    const user = getSessionUser(sessionToken);
+    const permissions = user.permissions || {
+      canManageSchools: false,
+      canManageStudents: false,
+      canManageVolunteers: false,
+      canMapVolunteers: false,
+      canAssess: false
+    };
+    
+    // Get reference data (stable, cacheable)
+    const geoData = getGeoData(sessionToken);
+    const kpis = getKpis(sessionToken);
+    
+    // Get operational data (user-scoped, not cached)
+    const schoolsRaw = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
+    schoolsRaw.shift();
+    const schools = filterSchoolsForUser_(schoolsRaw, user).map(mapSchoolRow_);
+    
+    const volRaw = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
+    volRaw.shift();
+    const volunteers = canManageVolunteers_(user) ? filterVolunteersByScope_(volRaw, user).map(mapVolunteerRow_) : [];
+    
+    // Get mappings
+    const mappingRaw = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
+    mappingRaw.shift();
+    const schoolMap = {};
+    schoolsRaw.forEach(r => { schoolMap[r[0]] = r[1]; });
+    const volMap = {};
+    volRaw.forEach(r => { volMap[r[2]] = r[1]; });
+    const scopedSchoolIds = getScopedSchoolIds_(schools);
+    const mappings = mappingRaw
+      .filter(r => scopedSchoolIds.has(r[2]))
+      .map(r => ({
+        mappingId: r[0],
+        volunteerEmail: r[1],
+        volunteerName: volMap[r[1]] || r[1],
+        schoolId: r[2],
+        schoolName: schoolMap[r[2]] || r[2]
+      }));
+    
+    // Get dashboard stats
+    const dashboard = getDashboardStats(user);
+    
+    return {
+      success: true,
+      user,
+      permissions: {
+        canManageSchools: permissions.canManageSchools,
+        canManageStudents: permissions.canManageStudents,
+        canManageVolunteers: permissions.canManageVolunteers,
+        canMapVolunteers: permissions.canManageMappings,
+        canAssess: permissions.canAssess
+      },
+      referenceData: {
+        geoData,
+        kpis,
+        cacheVersion: CACHE_VERSION
+      },
+      dashboard,
+      schools,
+      volunteers,
+      mappings
+    };
+  } catch (e) {
+    Logger.log(e);
+    return { success: false, message: e.message };
+  }
+}
+

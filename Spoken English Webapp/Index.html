@@ -30,6 +30,16 @@
   </div>
 </div>
 
+<!-- Global Loading Overlay -->
+<div id="loadingOverlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 10000; justify-content: center; align-items: center;">
+  <div style="background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2); text-align: center; max-width: 300px;">
+    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <h5 id="loadingMessage" style="margin: 0; color: var(--text-primary); font-weight: 600;">Loading...</h5>
+  </div>
+</div>
+
 <div class="d-flex" id="app-wrapper">
   <!-- Sidebar -->
   <nav class="sidebar" id="sidebar">
@@ -502,6 +512,76 @@ let mgmtData = { schools: [], volunteers: [], mappings: [] };
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let confirmModalCallback = null;
 
+const CACHE_VERSION = '1.0';
+
+function getCacheKey(type) {
+  const email = currentUser ? currentUser.email : '';
+  return `yfs.refData.${email}.${CACHE_VERSION}.${type}`;
+}
+
+function getCachedGeoData() {
+  if (!currentUser) return null;
+  const cached = localStorage.getItem(getCacheKey('geoData'));
+  return cached ? JSON.parse(cached) : null;
+}
+
+function setCachedGeoData(data) {
+  if (!currentUser) return;
+  localStorage.setItem(getCacheKey('geoData'), JSON.stringify(data));
+}
+
+function getCachedKpis() {
+  if (!currentUser) return null;
+  const cached = localStorage.getItem(getCacheKey('kpis'));
+  return cached ? JSON.parse(cached) : null;
+}
+
+function setCachedKpis(data) {
+  if (!currentUser) return;
+  localStorage.setItem(getCacheKey('kpis'), JSON.stringify(data));
+}
+
+function clearReferenceDataCache() {
+  if (!currentUser) return;
+  localStorage.removeItem(getCacheKey('geoData'));
+  localStorage.removeItem(getCacheKey('kpis'));
+}
+
+function showLoading(message = 'Loading...') {
+  const overlay = document.getElementById('loadingOverlay');
+  document.getElementById('loadingMessage').textContent = message;
+  overlay.style.display = 'flex';
+}
+
+function hideLoading() {
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.style.display = 'none';
+}
+
+function withLoading(promise, message = 'Loading...') {
+  showLoading(message);
+  return promise.finally(() => hideLoading());
+}
+
+function refreshManagementData() {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(data => {
+        if (data && data.success) {
+          const { schools, volunteers, mappings, geoData: geo } = data;
+          mgmtData = { schools, volunteers, mappings };
+          geoData = geo;
+          setCachedGeoData(geo);
+          resolve(data);
+        } else {
+          reject(new Error(data?.message || 'Failed to load management data'));
+        }
+      })
+      .withFailureHandler(reject)
+      .getDataForManagementView(sessionToken);
+  });
+}
+
 function showConfirmModal(title, message, onConfirm) {
   document.getElementById('confirmModalTitle').textContent = title;
   document.getElementById('confirmModalMessage').textContent = message;
@@ -719,7 +799,7 @@ function loadAssessmentView() {
   document.getElementById('schoolSelect').innerHTML = '';
   document.getElementById('classSelect').innerHTML = '<option value="">--Select Class--</option>';
   document.getElementById('assessmentTypeSelect').value = '';
-  switchView('loadingView');
+  showLoading('Loading assessment data...');
 
   if (currentUser.role === 'Volunteer') {
     google.script.run
@@ -729,9 +809,13 @@ function loadAssessmentView() {
         schools.forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
         sel.onchange = handleSchoolChange;
         document.getElementById('classSelect').addEventListener('change', clearStudentGrid);
+        hideLoading();
         switchView('assessmentView');
       })
-      .withFailureHandler(showError)
+      .withFailureHandler(err => {
+        hideLoading();
+        showError(err);
+      })
       .getMappedSchoolsForVolunteer(sessionToken, currentUser.email);
   } else {
     // Admin/Supervisor: show all scoped schools via management data
@@ -742,9 +826,13 @@ function loadAssessmentView() {
         (data.schools || []).forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
         sel.onchange = handleSchoolChange;
         document.getElementById('classSelect').addEventListener('change', clearStudentGrid);
+        hideLoading();
         switchView('assessmentView');
       })
-      .withFailureHandler(showError)
+      .withFailureHandler(err => {
+        hideLoading();
+        showError(err);
+      })
       .getDataForManagementView(sessionToken);
   }
 }
@@ -950,14 +1038,18 @@ function handleSaveAssessments(btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
+  showLoading('Saving assessment data...');
+
   google.script.run
     .withSuccessHandler(res => {
+      hideLoading();
       showToast(res.message, res.success ? 'success' : 'danger');
       if (res.success) loadAssessmentView();
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Save Assessments';
     })
     .withFailureHandler(err => {
+      hideLoading();
       showToast(err.message, 'danger');
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Save Assessments';
@@ -969,10 +1061,16 @@ function handleSaveAssessments(btn) {
 //  MANAGEMENT
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function loadManagementView() {
-  switchView('loadingView');
+  showLoading('Loading management data...');
   google.script.run
-    .withSuccessHandler(setupManagementUI)
-    .withFailureHandler(showError)
+    .withSuccessHandler(data => {
+      hideLoading();
+      setupManagementUI(data);
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showError(err);
+    })
     .getDataForManagementView(sessionToken);
 }
 
@@ -1161,8 +1259,11 @@ function handleAddSchool(btn) {
     strength: parseInt(strength)
   };
 
+  showLoading('Adding school...');
+
   google.script.run
     .withSuccessHandler(res => {
+      hideLoading();
       if (res.success) {
         showToast(res.message, 'success');
         mgmtData.schools.push(res.school);
@@ -1181,6 +1282,7 @@ function handleAddSchool(btn) {
       btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add School';
     })
     .withFailureHandler(err => {
+      hideLoading();
       showToast(err.message, 'danger');
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add School';
@@ -1194,8 +1296,10 @@ function handleDeleteSchool(schoolId, btn) {
   if (!school) return;
   
   // Check for child records before showing confirmation
+  showLoading('Validating deletion...');
   google.script.run
     .withSuccessHandler(validation => {
+      hideLoading();
       if (!validation.canDelete) {
         showToast(validation.reason, 'warning');
         return;
@@ -1207,8 +1311,10 @@ function handleDeleteSchool(schoolId, btn) {
         `Are you sure you want to delete "${school.name}"? This action cannot be undone.`,
         () => {
           btn.disabled = true;
+          showLoading('Deleting school...');
           google.script.run
             .withSuccessHandler(res => {
+              hideLoading();
               if (res.success) {
                 mgmtData.schools = mgmtData.schools.filter(s => s.id !== schoolId);
                 renderSchoolsTable(mgmtData.schools);
@@ -1220,6 +1326,7 @@ function handleDeleteSchool(schoolId, btn) {
               }
             })
             .withFailureHandler(err => { 
+              hideLoading();
               showToast(err.message, 'danger'); 
               btn.disabled = false; 
             })
@@ -1227,7 +1334,10 @@ function handleDeleteSchool(schoolId, btn) {
         }
       );
     })
-    .withFailureHandler(err => showToast('Validation error: ' + err.message, 'danger'))
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast('Validation error: ' + err.message, 'danger');
+    })
     .canDeleteSchool(sessionToken, schoolId);
 }
 
@@ -1296,8 +1406,11 @@ function handleAddVolunteer(btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
 
+  showLoading('Adding volunteer...');
+
   google.script.run
     .withSuccessHandler(res => {
+      hideLoading();
       if (res.success) {
         showToast(res.message, 'success');
         mgmtData.volunteers.push(res.volunteer);
@@ -1317,6 +1430,7 @@ function handleAddVolunteer(btn) {
       btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
     })
     .withFailureHandler(err => {
+      hideLoading();
       showToast(err.message, 'danger');
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
@@ -1330,8 +1444,10 @@ function handleDeleteVolunteer(volunteerEmail, btn) {
   if (!volunteer) return;
   
   // Check for child records before showing confirmation
+  showLoading('Validating deletion...');
   google.script.run
     .withSuccessHandler(validation => {
+      hideLoading();
       if (!validation.canDelete) {
         showToast(validation.reason, 'warning');
         return;
@@ -1343,8 +1459,10 @@ function handleDeleteVolunteer(volunteerEmail, btn) {
         `Are you sure you want to delete "${volunteer.name} (${volunteer.email})"? This action cannot be undone.`,
         () => {
           btn.disabled = true;
+          showLoading('Deleting volunteer...');
           google.script.run
             .withSuccessHandler(res => {
+              hideLoading();
               if (res.success) {
                 mgmtData.volunteers = mgmtData.volunteers.filter(v => v.email !== volunteerEmail);
                 renderVolunteersTable(mgmtData.volunteers);
@@ -1362,6 +1480,7 @@ function handleDeleteVolunteer(volunteerEmail, btn) {
               }
             })
             .withFailureHandler(err => { 
+              hideLoading();
               showToast(err.message, 'danger'); 
               btn.disabled = false; 
             })
@@ -1369,7 +1488,10 @@ function handleDeleteVolunteer(volunteerEmail, btn) {
         }
       );
     })
-    .withFailureHandler(err => showToast('Validation error: ' + err.message, 'danger'))
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast('Validation error: ' + err.message, 'danger');
+    })
     .canDeleteVolunteer(sessionToken, volunteerEmail);
 }
 
@@ -1428,8 +1550,11 @@ function handleMapVolunteer(btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Mapping...';
 
+  showLoading('Creating mapping...');
+
   google.script.run
     .withSuccessHandler(res => {
+      hideLoading();
       if (res.success) {
         showToast(res.message, 'success');
         mgmtData.mappings.push(res.mapping);
@@ -1459,6 +1584,7 @@ function handleMapVolunteer(btn) {
       btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Create Mapping';
     })
     .withFailureHandler(err => {
+      hideLoading();
       showToast(err.message, 'danger');
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Create Mapping';
@@ -1476,8 +1602,10 @@ function handleDeleteMapping(mappingId, btn) {
     `Are you sure you want to remove "${mapping.volunteerName}" from "${mapping.schoolName}"?`,
     () => {
       btn.disabled = true;
+      showLoading('Removing mapping...');
       google.script.run
         .withSuccessHandler(res => {
+          hideLoading();
           if (res.success) {
             document.getElementById('map-row-' + mappingId).remove();
             mgmtData.mappings = mgmtData.mappings.filter(m => m.mappingId !== mappingId);
@@ -1512,6 +1640,7 @@ function handleDeleteMapping(mappingId, btn) {
           }
         })
         .withFailureHandler(err => { 
+          hideLoading();
           showToast(err.message, 'danger'); 
           btn.disabled = false; 
         })
@@ -1603,8 +1732,10 @@ function handleDeleteStudent(studentId, btn) {
         `Are you sure you want to delete "${escHtml(studentName)}"? This action cannot be undone.`,
         () => {
           btn.disabled = true;
+          showLoading('Deleting student...');
           google.script.run
             .withSuccessHandler(res => {
+              hideLoading();
               if (res.success) {
                 row.remove();
                 showToast('Student deleted successfully.', 'success');
@@ -1614,6 +1745,7 @@ function handleDeleteStudent(studentId, btn) {
               }
             })
             .withFailureHandler(err => {
+              hideLoading();
               showToast(err.message, 'danger');
               btn.disabled = false;
             })
@@ -1621,7 +1753,9 @@ function handleDeleteStudent(studentId, btn) {
         }
       );
     })
-    .withFailureHandler(err => showToast('Validation error: ' + err.message, 'danger'))
+    .withFailureHandler(err => {
+      showToast('Validation error: ' + err.message, 'danger');
+    })
     .canDeleteStudent(sessionToken, studentId);
 }
 
@@ -1644,14 +1778,18 @@ function saveManagedStudents(btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
+  showLoading('Saving students...');
+
   google.script.run
     .withSuccessHandler(res => {
+      hideLoading();
       showToast(res.message, res.success ? 'success' : 'danger');
       if (res.success) loadManagedStudents();
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save Students';
     })
     .withFailureHandler(err => {
+      hideLoading();
       showToast(err.message, 'danger');
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save Students';
