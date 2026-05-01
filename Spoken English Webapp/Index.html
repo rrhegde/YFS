@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
   <base target="_top">
@@ -86,7 +86,7 @@
                   <h4 class="mb-2" style="font-weight: 700; color: var(--text-primary);">Volunteer Login</h4>
                   <p class="text-muted" style="font-size: 0.95rem;">Enter your 4-digit PIN to continue</p>
                 </div>
-                <input type="password" id="pinInput" class="form-control form-control-lg text-center mb-3" inputmode="numeric" pattern="[0-9]*" placeholder="••••" autocomplete="one-time-code" style="letter-spacing: 8px; font-size: 1.8rem; font-weight: 300;">
+                <input type="password" id="pinInput" class="form-control form-control-lg text-center mb-3" inputmode="numeric" pattern="[0-9]*" placeholder="â€¢â€¢â€¢â€¢" autocomplete="one-time-code" style="letter-spacing: 8px; font-size: 1.8rem; font-weight: 300;">
                 <div class="d-grid">
                   <button class="btn btn-primary btn-lg" onclick="handlePinSubmit()" style="font-weight: 600; padding: 0.8rem;">
                     <i class="bi bi-arrow-right-circle me-2"></i>Unlock
@@ -191,7 +191,7 @@
                 </select>
               </div>
               <div class="col-md-1 d-flex align-items-end">
-                <button class="btn btn-primary w-100" onclick="loadStudentGrid()">
+                <button class="btn btn-primary w-100" onclick="loadStudentGrid(this)">
                   <i class="bi bi-arrow-repeat me-2"></i>Load
                 </button>
               </div>
@@ -205,7 +205,7 @@
                 </table>
               </div>
               <div class="d-flex justify-content-end mt-4">
-                <button class="btn btn-success px-5" onclick="handleSaveAssessments()">
+                <button class="btn btn-success px-5" onclick="handleSaveAssessments(this)">
                   <i class="bi bi-check-circle-fill me-2"></i>Save Assessments
                 </button>
               </div>
@@ -248,7 +248,7 @@
           <div class="card-body">
             <div class="tab-content">
 
-              <!-- ═══ ADD SCHOOL TAB ═══ -->
+              <!-- â•â•â• ADD SCHOOL TAB â•â•â• -->
               <div class="tab-pane fade show active" id="tab-add-school">
                 <div class="row g-4">
                   <!-- Form column -->
@@ -312,7 +312,7 @@
                 </div>
               </div>
 
-              <!-- ═══ MANAGE STUDENTS TAB ═══ -->
+              <!-- â•â•â• MANAGE STUDENTS TAB â•â•â• -->
               <div class="tab-pane fade" id="tab-manage-students">
                 <div class="row g-3 mb-3">
                   <div class="col-md-6">
@@ -358,7 +358,7 @@
                 </div>
               </div>
 
-              <!-- ═══ ADD VOLUNTEER TAB ═══ -->
+              <!-- â•â•â• ADD VOLUNTEER TAB â•â•â• -->
               <div class="tab-pane fade" id="tab-add-volunteer">
                 <div class="row g-4">
                   <div class="col-lg-5">
@@ -374,7 +374,7 @@
                       </div>
                       <div class="col-md-6">
                         <label class="form-label">PIN (4 digits) <span class="text-danger">*</span></label>
-                        <input type="text" id="volunteerPin" class="form-control" placeholder="••••" maxlength="4" pattern="\d{4}">
+                        <input type="text" id="volunteerPin" class="form-control" placeholder="â€¢â€¢â€¢â€¢" maxlength="4" pattern="\d{4}">
                       </div>
                       <div class="col-md-6" id="volRegionWrapper">
                         <label class="form-label">Region <span class="text-danger">*</span></label>
@@ -416,7 +416,7 @@
                 </div>
               </div>
 
-              <!-- ═══ MAP VOLUNTEER TAB ═══ -->
+              <!-- â•â•â• MAP VOLUNTEER TAB â•â•â• -->
               <div class="tab-pane fade" id="tab-map-volunteer">
                 <div class="row g-4">
                   <!-- Mapping form -->
@@ -486,18 +486,20 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  GLOBAL STATE
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let currentUser = null;
+let sessionToken = '<?= sessionToken ?>';
+let bootstrappedUser = <?!= userJson ?>;
 let kpiMaster = [];
 let studentsList = [];
 let geoData = { regions: [], chapters: {} };
 let mgmtData = { schools: [], volunteers: [], mappings: [] };
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CONFIRMATION MODAL
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let confirmModalCallback = null;
 
 function showConfirmModal(title, message, onConfirm) {
@@ -519,9 +521,9 @@ function handleConfirmModalYes() {
   closeConfirmModal();
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  TOAST NOTIFICATION SYSTEM (replaces all alert() calls)
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function showToast(message, type = 'success', duration = 4000) {
   const alertTypes = { 
     success: 'alert-success', 
@@ -570,9 +572,9 @@ function showToast(message, type = 'success', duration = 4000) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  LOGO UPLOAD
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function setupLogoUpload() {
   const logoImg = document.getElementById('sidebarLogo');
   const fileInput = document.getElementById('logoFileInput');
@@ -608,9 +610,9 @@ function loadStoredLogo() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  INIT & AUTH
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 window.addEventListener('load', function() {
   setupLogoUpload();
   loadStoredLogo();
@@ -623,7 +625,7 @@ window.addEventListener('load', function() {
   });
   
   switchView('loadingView');
-  google.script.run.withSuccessHandler(handleUserAuth).withFailureHandler(showError).getUserDetails();
+  if (sessionToken && bootstrappedUser) { handleUserAuth(bootstrappedUser); } else { showError('Missing login session. Please log in again.'); }
 });
 
 function handleUserAuth(user) {
@@ -666,7 +668,7 @@ function initializeApp(user) {
 }
 
 function setupUIBasedOnRole(role) {
-  const canManage = role === 'Admin' || role === 'Supervisor' || role === 'Volunteer';
+  const canManage = role === 'Admin' || role === 'Supervisor' || role === 'Coordinator' || role === 'Volunteer';
   if (canManage) document.getElementById('nav-manage').style.display = 'block';
 }
 
@@ -682,9 +684,9 @@ function showError(error) {
   document.querySelector('#unauthorizedView .alert div').textContent = 'An error occurred: ' + msg;
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  PIN
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function handlePinSubmit() {
   const pin = document.getElementById('pinInput').value;
   if (!pin) return;
@@ -702,9 +704,9 @@ function handlePinSubmit() {
     .verifyVolunteerPin(pin);
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  ASSESSMENT
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function loadAssessmentView() {
   document.getElementById('student-grid-container').style.display = 'none';
   document.getElementById('validation-error').style.display = 'none';
@@ -724,7 +726,7 @@ function loadAssessmentView() {
         switchView('assessmentView');
       })
       .withFailureHandler(showError)
-      .getMappedSchoolsForVolunteer(currentUser.email);
+      .getMappedSchoolsForVolunteer(sessionToken, currentUser.email);
   } else {
     // Admin/Supervisor: show all scoped schools via management data
     google.script.run
@@ -737,7 +739,7 @@ function loadAssessmentView() {
         switchView('assessmentView');
       })
       .withFailureHandler(showError)
-      .getDataForManagementView();
+      .getDataForManagementView(sessionToken);
   }
 }
 
@@ -775,7 +777,7 @@ async function setupClassDropdown() {
       google.script.run
         .withSuccessHandler(resolve)
         .withFailureHandler(reject)
-        .getStudentsForSchool(schoolId);
+        .getStudentsForSchool(sessionToken, schoolId);
     });
     
     const classesSet = new Set(students.map(s => s.class).filter(Boolean));
@@ -800,7 +802,7 @@ async function setupClassDropdown() {
   }
 }
 
-async function loadStudentGrid() {
+async function loadStudentGrid(btn) {
   const schoolId = document.getElementById('schoolSelect').value;
   const classFilter = document.getElementById('classSelect').value;
   const assessmentType = document.getElementById('assessmentTypeSelect').value;
@@ -814,14 +816,14 @@ async function loadStudentGrid() {
     return;
   }
 
-  const btn = event.target.closest('button');
+  btn = btn || document.querySelector('button[onclick^="loadStudentGrid"]');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
   try {
     // Correct server call #1
     const allStudents = await new Promise((resolve, reject) => {
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getStudentsForSchool(schoolId);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getStudentsForSchool(sessionToken, schoolId);
     });
     const students = allStudents.filter(s => String(s.class).trim() === String(classFilter).trim());
     
@@ -835,7 +837,7 @@ async function loadStudentGrid() {
     if (assessmentType === 'Midline' || assessmentType === 'Endline') {
       // Correct server call #2
       const existingTypes = await new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentTypes(students[0].studentId);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentTypes(sessionToken, students[0].studentId);
       });
       if (assessmentType === 'Midline' && !existingTypes.includes('Baseline')) {
         errDiv.textContent = 'A Baseline assessment must be completed before a Midline can be entered.';
@@ -851,13 +853,13 @@ async function loadStudentGrid() {
 
     // Correct server call #3
     const kpis = await new Promise((resolve, reject) => {
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getKpis();
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getKpis(sessionToken);
     });
     kpiMaster = kpis;
     
     // Correct server call #4
     const existingDataMap = await new Promise((resolve, reject) => {
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentDataForClass(schoolId, classFilter, assessmentType);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentDataForClass(sessionToken, schoolId, classFilter, assessmentType);
     });
     
     renderAssessmentGrid(students, kpis, existingDataMap);
@@ -920,7 +922,7 @@ function toggleAttendance(checkbox) {
   row.querySelector('.attendance-label').className = 'attendance-label fw-semibold ' + (checkbox.checked ? 'text-success' : 'text-danger');
 }
 
-function handleSaveAssessments() {
+function handleSaveAssessments(btn) {
   const schoolId = document.getElementById('schoolSelect').value;
   const assessmentType = document.getElementById('assessmentTypeSelect').value;
   const payload = [];
@@ -938,7 +940,7 @@ function handleSaveAssessments() {
 
   if (!payload.length) { showToast('No data to save.', 'warning'); return; }
 
-  const btn = event.target;
+  btn = btn || document.querySelector('button[onclick^="handleSaveAssessments"]');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
@@ -954,18 +956,18 @@ function handleSaveAssessments() {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Save Assessments';
     })
-    .saveAssessments(payload);
+    .saveAssessments(sessionToken, payload);
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  MANAGEMENT
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function loadManagementView() {
   switchView('loadingView');
   google.script.run
     .withSuccessHandler(setupManagementUI)
     .withFailureHandler(showError)
-    .getDataForManagementView();
+    .getDataForManagementView(sessionToken);
 }
 
 function setupManagementUI(data) {
@@ -974,7 +976,7 @@ function setupManagementUI(data) {
   geoData = geo;
 
   // Show/hide tabs based on role
-  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor';
+  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor' || user.role === 'Coordinator';
   document.getElementById('nav-tab-volunteer').style.display = canManageVols ? '' : 'none';
   document.getElementById('nav-tab-map').style.display = canManageVols ? '' : 'none';
 
@@ -1066,7 +1068,7 @@ function setupGeoDropdowns(geo, user) {
   }
 }
 
-// ─── Schools Table ─────────────────────────────────────────
+// â”€â”€â”€ Schools Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderSchoolsTable(schools) {
   const body = document.getElementById('schoolsTableBody');
   document.getElementById('schoolCountBadge').textContent = schools.length;
@@ -1161,7 +1163,7 @@ function handleAddSchool(btn) {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add School';
     })
-    .addSchool(schoolData);
+    .addSchool(sessionToken, schoolData);
 }
 
 function handleDeleteSchool(schoolId, btn) {
@@ -1199,12 +1201,12 @@ function handleDeleteSchool(schoolId, btn) {
               showToast(err.message, 'danger'); 
               btn.disabled = false; 
             })
-            .deleteSchool(schoolId);
+            .deleteSchool(sessionToken, schoolId);
         }
       );
     })
     .withFailureHandler(err => showToast('Validation error: ' + err.message, 'danger'))
-    .canDeleteSchool(schoolId);
+    .canDeleteSchool(sessionToken, schoolId);
 }
 
 function refreshSchoolSelects() {
@@ -1219,7 +1221,7 @@ function refreshSchoolSelects() {
   });
 }
 
-// ─── Volunteers Table ──────────────────────────────────────
+// â”€â”€â”€ Volunteers Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderVolunteersTable(volunteers) {
   const body = document.getElementById('volunteersTableBody');
   document.getElementById('volCountBadge').textContent = volunteers.length;
@@ -1297,7 +1299,7 @@ function handleAddVolunteer(btn) {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
     })
-    .addVolunteer({ name, email, pin, region, chapter });
+    .addVolunteer(sessionToken, { name, email, pin, region, chapter });
 }
 
 function handleDeleteVolunteer(volunteerEmail, btn) {
@@ -1324,13 +1326,12 @@ function handleDeleteVolunteer(volunteerEmail, btn) {
               if (res.success) {
                 mgmtData.volunteers = mgmtData.volunteers.filter(v => v.email !== volunteerEmail);
                 renderVolunteersTable(mgmtData.volunteers);
-                // Re-add to mapping select if it exists
+                // Remove deleted volunteer from mapping select if it is present.
                 const volSel = document.getElementById('mapVolunteerSelect');
                 if (volSel) {
-                  const optVol = document.createElement('option');
-                  optVol.value = volunteer.email;
-                  optVol.textContent = `${volunteer.name} (${volunteer.email})`;
-                  volSel.appendChild(optVol);
+                  Array.from(volSel.options).forEach((opt, idx) => {
+                    if (opt.value === volunteerEmail) volSel.remove(idx);
+                  });
                 }
                 showToast('Volunteer deleted successfully.', 'success');
               } else {
@@ -1342,15 +1343,15 @@ function handleDeleteVolunteer(volunteerEmail, btn) {
               showToast(err.message, 'danger'); 
               btn.disabled = false; 
             })
-            .deleteVolunteer(volunteerEmail);
+            .deleteVolunteer(sessionToken, volunteerEmail);
         }
       );
     })
     .withFailureHandler(err => showToast('Validation error: ' + err.message, 'danger'))
-    .canDeleteVolunteer(volunteerEmail);
+    .canDeleteVolunteer(sessionToken, volunteerEmail);
 }
 
-// ─── Mappings Table ────────────────────────────────────────
+// â”€â”€â”€ Mappings Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderMappingsTable(mappings) {
   const body = document.getElementById('mappingsTableBody');
   document.getElementById('mapCountBadge').textContent = mappings.length;
@@ -1440,7 +1441,7 @@ function handleMapVolunteer(btn) {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Create Mapping';
     })
-    .mapVolunteerToSchool({ volunteerEmail, schoolId });
+    .mapVolunteerToSchool(sessionToken, { volunteerEmail, schoolId });
 }
 
 function handleDeleteMapping(mappingId, btn) {
@@ -1492,12 +1493,12 @@ function handleDeleteMapping(mappingId, btn) {
           showToast(err.message, 'danger'); 
           btn.disabled = false; 
         })
-        .deleteMapping(mappingId);
+        .deleteMapping(sessionToken, mappingId);
     }
   );
 }
 
-// ─── Students ──────────────────────────────────────────────
+// â”€â”€â”€ Students â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function loadManagedStudents() {
   const schoolId = document.getElementById('manageSchoolSelect').value;
   if (!schoolId) return;
@@ -1520,7 +1521,7 @@ function loadManagedStudents() {
       document.getElementById('students-loading').style.display = 'none';
       showToast('Error loading students: ' + err.message, 'danger');
     })
-    .getStudentsBySchool(schoolId);
+    .getStudentsBySchool(sessionToken, schoolId);
 }
 
 function renderManagedStudentGrid(students) {
@@ -1594,12 +1595,12 @@ function handleDeleteStudent(studentId, btn) {
               showToast(err.message, 'danger');
               btn.disabled = false;
             })
-            .deleteStudent(studentId);
+            .deleteStudent(sessionToken, studentId);
         }
       );
     })
     .withFailureHandler(err => showToast('Validation error: ' + err.message, 'danger'))
-    .canDeleteStudent(studentId);
+    .canDeleteStudent(sessionToken, studentId);
 }
 
 
@@ -1633,12 +1634,12 @@ function saveManagedStudents(btn) {
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save Students';
     })
-    .saveOrUpdateStudents(toSave, schoolId);
+    .saveOrUpdateStudents(sessionToken, toSave, schoolId);
 }
 
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  UTILITIES
-// ═══════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 // Live search filter for a <select> based on a search <input>
 function setupLiveSearch(searchId, selectId) {
@@ -1659,3 +1660,6 @@ function escHtml(str) {
 </script>
 </body>
 </html>
+
+
+
