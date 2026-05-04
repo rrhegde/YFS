@@ -626,6 +626,7 @@ function mapVolunteerToSchool(token, mappingData) {
   const sheet = SS.getSheetByName(SHEETS.MAPPING);
   const existing = sheet.getDataRange().getValues();
   if (existing.some(r => r[1] === mappingData.volunteerEmail && r[2] === mappingData.schoolId)) return { success: false, message: 'This volunteer is already mapped to this school.' };
+  if (existing.some(r => normalizeEmail_(r[1]) === normalizeEmail_(mappingData.volunteerEmail))) return { success: false, message: 'This volunteer is already mapped to a school. Remove that mapping first.' };
   const newId = 'MAP-' + new Date().getTime();
   sheet.appendRow([newId, mappingData.volunteerEmail, mappingData.schoolId]);
   const schoolRow = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues().find(r => r[0] === mappingData.schoolId);
@@ -761,16 +762,55 @@ function getDashboardStats(user) {
     const scopedSchools = filterSchoolsByScope_(schoolsData.slice(1), user);
     const scopedSchoolIds = new Set(scopedSchools.map(s => s[0]));
     const scopedStudents = studentsData.slice(1).filter(r => scopedSchoolIds.has(r[2]));
-    const scopedAssessments = assessmentsData.slice(1).filter(r => scopedSchoolIds.has(r[2]));
+    const assessedSchoolIdsByType = {
+      Baseline: new Set(),
+      Midline: new Set(),
+      Endline: new Set()
+    };
+
+    assessmentsData.slice(1).forEach(row => {
+      const schoolId = row[2];
+      const assessmentType = row[4];
+      const status = row[7];
+      if (!scopedSchoolIds.has(schoolId) || !assessedSchoolIdsByType[assessmentType] || status !== 'Present') return;
+      assessedSchoolIdsByType[assessmentType].add(schoolId);
+    });
     
     return {
       totalSchools: scopedSchools.length,
       totalStudents: scopedStudents.length,
-      totalAssessments: scopedAssessments.length
+      baselineDone: assessedSchoolIdsByType.Baseline.size,
+      midlineDone: assessedSchoolIdsByType.Midline.size,
+      endlineDone: assessedSchoolIdsByType.Endline.size
     };
   } catch (e) {
     Logger.log('Error computing dashboard stats: ' + e);
-    return { totalSchools: 0, totalStudents: 0, totalAssessments: 0 };
+    return { totalSchools: 0, totalStudents: 0, baselineDone: 0, midlineDone: 0, endlineDone: 0 };
+  }
+}
+
+function getDashboardScopeLabel_(user) {
+  if (isAdmin_(user)) return 'PAN India Level';
+  if (isSupervisor_(user)) return `Region Level: ${user.assignedRegion || 'Not assigned'}`;
+  if (isCoordinator_(user)) return `Chapter Level: ${user.assignedChapter || 'Not assigned'}`;
+  return '';
+}
+
+function getDashboardStatsForUser(token) {
+  try {
+    const user = getSessionUser(token);
+    if (isVolunteer_(user)) {
+      return { success: false, message: 'Dashboard is not available for volunteers.' };
+    }
+    ensurePermission_(isAdmin_(user) || isSupervisor_(user) || isCoordinator_(user), 'Authorization failed.');
+    return {
+      success: true,
+      scopeLabel: getDashboardScopeLabel_(user),
+      stats: getDashboardStats(user)
+    };
+  } catch (e) {
+    Logger.log(e);
+    return { success: false, message: e.message };
   }
 }
 

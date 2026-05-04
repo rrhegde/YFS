@@ -41,10 +41,15 @@
 </div>
 
 <div class="d-flex" id="app-wrapper">
+  <button class="mobile-nav-toggle" id="mobileNavToggle" type="button" onclick="toggleMobileNav()" aria-label="Open navigation">
+    <i class="bi bi-list"></i>
+  </button>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop" onclick="closeMobileNav()"></div>
+
   <!-- Sidebar -->
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <a href="#" class="d-flex align-items-center text-decoration-none" onclick="switchView('dashboardView'); return false;">
+      <a href="#" class="d-flex align-items-center text-decoration-none" onclick="goHome(); return false;">
         <div class="logo-container file-input-wrapper">
           <img id="sidebarLogo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' fill='%232563eb' viewBox='0 0 16 16'%3E%3Cpath d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z'/%3E%3C/svg%3E" class="logo-img" alt="Logo" title="Click to upload logo">
           <input type="file" id="logoFileInput" accept="image/*" style="display:none;">
@@ -56,14 +61,14 @@
       </a>
     </div>
     <div class="list-group list-group-flush mt-3">
-      <a href="#" class="list-group-item list-group-item-action" onclick="switchView('dashboardView'); return false;" id="nav-dashboard">
+      <a href="#" class="list-group-item list-group-item-action" onclick="switchView('dashboardView'); closeMobileNav(); return false;" id="nav-dashboard">
         <i class="bi bi-grid-1x2-fill me-2"></i> Dashboard
       </a>
-      <a href="#" class="list-group-item list-group-item-action" onclick="loadAssessmentView(); return false;" id="nav-assessment">
-        <i class="bi bi-card-checklist me-2"></i> Assessment
-      </a>
-      <a href="#" class="list-group-item list-group-item-action" onclick="loadManagementView(); return false;" id="nav-manage" style="display:none;">
+      <a href="#" class="list-group-item list-group-item-action" onclick="loadManagementView(); closeMobileNav(); return false;" id="nav-manage" style="display:none;">
         <i class="bi bi-people-fill me-2"></i> Manage
+      </a>
+      <a href="#" class="list-group-item list-group-item-action" onclick="loadAssessmentView(); closeMobileNav(); return false;" id="nav-assessment">
+        <i class="bi bi-card-checklist me-2"></i> Assessment
       </a>
     </div>
     <div class="p-3 rounded m-2" id="sidebar-user" style="display:none; position:absolute; bottom:20px; width:calc(100% - 1rem);">
@@ -118,19 +123,22 @@
             <div>
               <h1 class="mb-1" style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary);">Dashboard</h1>
               <p class="text-muted mb-0" style="font-size: 1rem;">Welcome back, <strong id="userEmail"></strong></p>
+              <div class="mt-2">
+                <span class="badge bg-light text-dark border px-3 py-2" id="dashboardScopeLabel">Loading scope...</span>
+              </div>
             </div>
             <span id="userRole" class="badge fs-6 px-4 py-2" style="font-size: 0.95rem;"></span>
           </div>
         </div>
         
         <div class="row g-4 mb-5">
-          <div class="col-md-4">
+          <div class="col-md-6 col-xl">
             <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
               <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
                     <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Schools</p>
-                    <p class="stat-value mb-0">--</p>
+                    <p class="stat-value mb-0" id="statSchools">--</p>
                   </div>
                   <div class="stat-icon" style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(37, 99, 235, 0.05) 100%); color: var(--yfs-primary);">
                     <i class="bi bi-building"></i>
@@ -139,13 +147,13 @@
               </div>
             </div>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6 col-xl">
             <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
               <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
                     <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Students</p>
-                    <p class="stat-value mb-0">--</p>
+                    <p class="stat-value mb-0" id="statStudents">--</p>
                   </div>
                   <div class="stat-icon" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%); color: var(--yfs-secondary);">
                     <i class="bi bi-people"></i>
@@ -154,16 +162,46 @@
               </div>
             </div>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6 col-xl">
             <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
               <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
-                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Assessments</p>
-                    <p class="stat-value mb-0">--</p>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Baseline</p>
+                    <p class="stat-value mb-0" id="statBaseline">--</p>
                   </div>
                   <div class="stat-icon" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%); color: var(--yfs-accent);">
                     <i class="bi bi-clipboard-check"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl">
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Midline</p>
+                    <p class="stat-value mb-0" id="statMidline">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(99, 102, 241, 0.05) 100%); color: #4f46e5;">
+                    <i class="bi bi-clipboard-data"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl">
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Endline</p>
+                    <p class="stat-value mb-0" id="statEndline">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.05) 100%); color: var(--yfs-danger);">
+                    <i class="bi bi-clipboard2-check"></i>
                   </div>
                 </div>
               </div>
@@ -770,18 +808,57 @@ function initializeApp(user) {
   }
   document.getElementById('sidebar-user').style.display = 'block';
   setupUIBasedOnRole(user.role);
-  switchView('dashboardView');
+  if (user.role === 'Volunteer') {
+    loadManagementView();
+  } else {
+    switchView('dashboardView');
+    loadDashboardStats();
+  }
 }
 
 function setupUIBasedOnRole(role) {
   const canManage = role === 'Admin' || role === 'Supervisor' || role === 'Coordinator' || role === 'Volunteer';
   if (canManage) document.getElementById('nav-manage').style.display = 'block';
+  document.getElementById('nav-dashboard').style.display = role === 'Volunteer' ? 'none' : 'block';
 }
 
 function switchView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
   const t = document.getElementById(viewId);
   if (t) t.style.display = 'block';
+}
+
+function goHome() {
+  if (currentUser && currentUser.role === 'Volunteer') loadManagementView();
+  else switchView('dashboardView');
+}
+
+function loadDashboardStats() {
+  if (!currentUser || currentUser.role === 'Volunteer') return;
+  ['statSchools', 'statStudents', 'statBaseline', 'statMidline', 'statEndline'].forEach(id => {
+    document.getElementById(id).textContent = '--';
+  });
+  document.getElementById('dashboardScopeLabel').textContent = 'Loading scope...';
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res || !res.success) {
+        showToast(res?.message || 'Unable to load dashboard statistics.', 'danger');
+        return;
+      }
+      renderDashboardStats(res);
+    })
+    .withFailureHandler(err => showToast(err.message || 'Unable to load dashboard statistics.', 'danger'))
+    .getDashboardStatsForUser(sessionToken);
+}
+
+function renderDashboardStats(data) {
+  const stats = data.stats || {};
+  document.getElementById('dashboardScopeLabel').textContent = data.scopeLabel || '';
+  document.getElementById('statSchools').textContent = stats.totalSchools || 0;
+  document.getElementById('statStudents').textContent = stats.totalStudents || 0;
+  document.getElementById('statBaseline').textContent = stats.baselineDone || 0;
+  document.getElementById('statMidline').textContent = stats.midlineDone || 0;
+  document.getElementById('statEndline').textContent = stats.endlineDone || 0;
 }
 
 function showError(error) {
@@ -1088,9 +1165,9 @@ function setupManagementUI(data) {
   setupLiveSearch('mapSchSearch', 'mapSchoolSelect');
   setupLiveSearch('manageSchSearch', 'manageSchoolSelect');
 
-  // Populate mapping selects - filter out already mapped volunteers and schools
+  // Populate mapping selects - filter out mapped volunteers only.
+  // A school can have multiple volunteers across the year.
   const mappedVolunteerEmails = new Set(mappings.map(m => m.volunteerEmail));
-  const mappedSchoolIds = new Set(mappings.map(m => m.schoolId));
   
   const volSel = document.getElementById('mapVolunteerSelect');
   volSel.innerHTML = '';
@@ -1105,10 +1182,6 @@ function setupManagementUI(data) {
   schools.forEach(s => {
     schSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
     manageSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
-  });
-  // Filter mapped schools from mapping select only
-  Array.from(schSel.options).forEach((opt, idx) => {
-    if (mappedSchoolIds.has(opt.value)) schSel.remove(idx);
   });
 
   // Render all tables
@@ -1587,13 +1660,6 @@ function handleMapVolunteer(btn) {
     return;
   }
 
-  // Check one-to-one mapping: school already mapped to another volunteer
-  const schoolAlreadyMapped = mgmtData.mappings.find(m => m.schoolId === schoolId);
-  if (schoolAlreadyMapped) {
-    showToast(`${schoolAlreadyMapped.schoolName} is already mapped to ${schoolAlreadyMapped.volunteerName}. Remove that mapping first.`, 'warning');
-    return;
-  }
-
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Mapping...';
 
@@ -1608,18 +1674,12 @@ function handleMapVolunteer(btn) {
         assessmentViewLoaded = false;
         renderMappingsTable(mgmtData.mappings);
         
-        // Remove from select lists after successful mapping
+        // Remove the mapped volunteer only. Schools can be mapped to multiple volunteers.
         const volSel = document.getElementById('mapVolunteerSelect');
-        const schSel = document.getElementById('mapSchoolSelect');
         
         // Remove mapped volunteer option
         Array.from(volSel.options).forEach((opt, idx) => {
           if (opt.value === volunteerEmail) volSel.remove(idx);
-        });
-        
-        // Remove mapped school option
-        Array.from(schSel.options).forEach((opt, idx) => {
-          if (opt.value === schoolId) schSel.remove(idx);
         });
         
         // Reset search inputs
@@ -1660,9 +1720,8 @@ function handleDeleteMapping(mappingId, btn) {
             assessmentViewLoaded = false;
             document.getElementById('mapCountBadge').textContent = mgmtData.mappings.length;
             
-            // Re-add to select lists for remapping
+            // Re-add the volunteer to the mapping select. The school remained available.
             const volSel = document.getElementById('mapVolunteerSelect');
-            const schSel = document.getElementById('mapSchoolSelect');
             
             // Find the volunteer in the list and add back
             const volunteer = mgmtData.volunteers.find(v => v.email === mapping.volunteerEmail);
@@ -1672,17 +1731,7 @@ function handleDeleteMapping(mappingId, btn) {
               optVol.textContent = `${volunteer.name} (${volunteer.email})`;
               volSel.appendChild(optVol);
             }
-            
-            // Find the school in the list and add back
-            const school = mgmtData.schools.find(s => s.id === mapping.schoolId);
-            if (school) {
-              const optSch = document.createElement('option');
-              optSch.value = school.id;
-              optSch.textContent = school.name;
-              schSel.appendChild(optSch);
-            }
-            
-            showToast('Mapping removed. Volunteer and school are available for remapping.', 'success');
+            showToast('Mapping removed. Volunteer is available for remapping.', 'success');
           } else {
             showToast(res.message, 'danger');
             btn.disabled = false;
