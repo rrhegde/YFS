@@ -828,9 +828,24 @@ function switchView(viewId) {
   if (t) t.style.display = 'block';
 }
 
+function toggleMobileNav() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('mobileNavBackdrop');
+  const isOpen = sidebar.classList.toggle('active');
+  backdrop.classList.toggle('active', isOpen);
+}
+
+function closeMobileNav() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('mobileNavBackdrop');
+  if (sidebar) sidebar.classList.remove('active');
+  if (backdrop) backdrop.classList.remove('active');
+}
+
 function goHome() {
   if (currentUser && currentUser.role === 'Volunteer') loadManagementView();
   else switchView('dashboardView');
+  closeMobileNav();
 }
 
 function loadDashboardStats() {

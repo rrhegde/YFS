@@ -124,6 +124,11 @@
     min-height: 100vh;
   }
 
+  .mobile-nav-toggle,
+  .mobile-nav-backdrop {
+    display: none;
+  }
+
   /* ═══ CARD STYLING ═══ */
   .card {
     border: none;
@@ -409,20 +414,67 @@
 
   /* ═══ MOBILE RESPONSIVE ═══ */
   @media (max-width: 768px) {
-    .sidebar {
-      margin-left: calc(-1 * var(--sidebar-width));
+    #app-wrapper {
+      display: block !important;
     }
+
+    .sidebar {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 10020;
+      margin-left: calc(-1 * var(--sidebar-width));
+      overflow-y: auto;
+    }
+
     .main-content {
       width: 100%;
       margin-left: 0;
+    }
+
+    .main-content .container-fluid {
+      padding: 4.75rem 1rem 1rem !important;
     }
     
     .sidebar.active {
       margin-left: 0;
     }
 
+    .mobile-nav-toggle {
+      display: inline-flex;
+      position: fixed;
+      top: 0.85rem;
+      left: 0.85rem;
+      z-index: 10010;
+      width: 44px;
+      height: 44px;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 8px;
+      background: var(--yfs-primary);
+      color: #fff;
+      font-size: 1.45rem;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+    }
+
+    .mobile-nav-backdrop.active {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 10015;
+      background: rgba(15, 23, 42, 0.45);
+    }
+
     .sidebar-header {
       min-height: 100px;
+    }
+
+    .sidebar-user {
+      position: static !important;
+      width: auto !important;
+      margin-top: 2rem;
     }
   }
 
