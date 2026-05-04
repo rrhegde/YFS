@@ -311,6 +311,10 @@ function ensureStudentAccess_(user, studentId) {
 
 function getGeoData(token) {
   getSessionUser(token);
+  return getGeoData_();
+}
+
+function getGeoData_() {
   const data = SS.getSheetByName(SHEETS.GEO).getDataRange().getValues();
   data.shift();
   const regionsSet = new Set();
@@ -328,6 +332,10 @@ function getGeoData(token) {
 
 function getKpis(token) {
   getSessionUser(token);
+  return getKpis_();
+}
+
+function getKpis_() {
   const data = SS.getSheetByName(SHEETS.KPI_MASTER).getDataRange().getValues();
   data.shift();
   return data.map(row => ({ id: row[0], name: row[1] })).filter(k => k.id || k.name);
@@ -337,10 +345,16 @@ function getMappedSchoolsForVolunteer(token, volunteerEmail) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
   volunteerEmail = isVolunteer_(user) ? user.email : (volunteerEmail || user.email);
-  const mappingData = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
   const schoolsData = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
   const ids = Array.from(getMappedSchoolIdsForVolunteer_(volunteerEmail));
   return schoolsData.slice(1).filter(r => ids.includes(r[0]) && schoolInScope_(r, user)).map(r => ({ id: r[0], name: r[1] }));
+}
+
+function getSchoolsForAssessment(token) {
+  const user = getSessionUser(token);
+  ensurePermission_(canAssess_(user), 'Authorization failed.');
+  const schoolsData = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
+  return filterSchoolsForUser_(schoolsData.slice(1), user).map(r => ({ id: r[0], name: r[1] }));
 }
 
 function getStudentsForSchool(token, schoolId) {
@@ -392,6 +406,61 @@ function getExistingAssessmentDataForClass(token, schoolId, classValue, assessme
   return result;
 }
 
+function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
+  const user = getSessionUser(token);
+  ensurePermission_(canAssess_(user), 'Authorization failed.');
+  ensureSchoolAccess_(user, schoolId);
+
+  const studentsRows = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
+  const allStudentsForSchool = [];
+  const students = [];
+  const studentClassMap = {};
+
+  for (let i = 1; i < studentsRows.length; i++) {
+    const row = studentsRows[i];
+    if (row[2] != schoolId) continue;
+    const student = { studentId: row[0], studentName: row[1], class: row[3] };
+    allStudentsForSchool.push(student);
+    studentClassMap[row[0]] = row[3];
+    if (String(row[3]).trim() === String(classValue).trim()) students.push(student);
+  }
+
+  if (!students.length) {
+    return { students: [], allStudentsForSchool, kpis: getKpis_(), existingDataMap: {} };
+  }
+
+  if (assessmentType === 'Midline' || assessmentType === 'Endline') {
+    const prerequisite = assessmentType === 'Midline' ? 'Baseline' : 'Midline';
+    const types = getAssessmentTypesForStudent_(students[0].studentId);
+    if (!types.has(prerequisite)) {
+      throw new Error(`A ${prerequisite} assessment must be completed before a ${assessmentType} can be entered.`);
+    }
+  }
+
+  const kpis = getKpis_();
+  const assessments = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+  const result = {};
+  for (let i = 1; i < assessments.length; i++) {
+    const row = assessments[i];
+    const studentId = row[1];
+    if (row[2] == schoolId && row[4] === assessmentType && String(studentClassMap[studentId]).trim() === String(classValue).trim()) {
+      if (!result[studentId]) result[studentId] = { status: row[7], scores: [] };
+      if (row[7] === 'Present' && row[5]) result[studentId].scores.push({ kpiId: row[5], score: row[6] });
+    }
+  }
+
+  return { students, allStudentsForSchool, kpis, existingDataMap: result };
+}
+
+function getAssessmentTypesForStudent_(studentId) {
+  const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+  const types = new Set();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
+  }
+  return types;
+}
+
 function saveAssessments(token, assessmentData) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
@@ -400,9 +469,14 @@ function saveAssessments(token, assessmentData) {
   try {
     const sheet = SS.getSheetByName(SHEETS.ASSESSMENTS);
     const allData = sheet.getDataRange().getValues();
+    const header = allData[0] || [];
     const toDelete = new Set();
-    assessmentData.forEach(item => { ensureSchoolAccess_(user, item.schoolId); toDelete.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`); });
-    for (let i = allData.length - 1; i >= 1; i--) if (toDelete.has(`${allData[i][1]}|${allData[i][2]}|${allData[i][4]}`)) sheet.deleteRow(i + 1);
+    const schoolIds = new Set();
+    assessmentData.forEach(item => {
+      schoolIds.add(item.schoolId);
+      toDelete.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`);
+    });
+    schoolIds.forEach(schoolId => ensureSchoolAccess_(user, schoolId));
     const ts = new Date();
     const rows = [];
     assessmentData.forEach(item => {
@@ -410,7 +484,12 @@ function saveAssessments(token, assessmentData) {
       if (status === 'Absent') rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', ts]);
       else scores.forEach(s => rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, s.score, 'Present', ts]));
     });
-    if (rows.length > 0) sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    const keptRows = allData.slice(1).filter(row => !toDelete.has(`${row[1]}|${row[2]}|${row[4]}`));
+    const output = [header].concat(keptRows, rows);
+    sheet.getDataRange().clearContent();
+    if (output.length > 0 && output[0].length > 0) {
+      sheet.getRange(1, 1, output.length, output[0].length).setValues(output);
+    }
     return { success: true, message: 'Assessments saved successfully!' };
   } catch (e) { Logger.log(e); return { success: false, message: e.message }; }
   finally { lock.releaseLock(); }
@@ -418,17 +497,17 @@ function saveAssessments(token, assessmentData) {
 
 function getDataForManagementView(token) {
   const user = getSessionUser(token);
+  ensurePermission_(canViewManagement_(user), 'Authorization failed.');
   const schoolsRaw = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues(); schoolsRaw.shift();
   const volRaw = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues(); volRaw.shift();
   const mappingRaw = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues(); mappingRaw.shift();
-  ensurePermission_(canViewManagement_(user), 'Authorization failed.');
   const schools = filterSchoolsForUser_(schoolsRaw, user).map(mapSchoolRow_);
   const volunteers = canManageVolunteers_(user) ? filterVolunteersByScope_(volRaw, user).map(mapVolunteerRow_) : [];
   const schoolMap = {}; schoolsRaw.forEach(r => { schoolMap[r[0]] = r[1]; });
   const volMap = {}; volRaw.forEach(r => { volMap[r[2]] = r[1]; });
   const scopedSchoolIds = getScopedSchoolIds_(schools);
   const mappings = mappingRaw.filter(r => scopedSchoolIds.has(r[2])).map(r => ({ mappingId: r[0], volunteerEmail: r[1], volunteerName: volMap[r[1]] || r[1], schoolId: r[2], schoolName: schoolMap[r[2]] || r[2] }));
-  return { user, schools, volunteers, mappings, geoData: getGeoData(token) };
+  return { success: true, user, schools, volunteers, mappings, geoData: getGeoData_() };
 }
 
 function addSchool(token, schoolData) {
@@ -525,20 +604,28 @@ function saveOrUpdateStudents(token, students, schoolId) {
     const headers = all.shift();
     const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class');
     if ([idCol, nameCol, classCol].includes(-1)) throw new Error('Required column missing in Students sheet.');
-    const idToRow = {};
-    all.forEach((row, i) => { if (row[idCol]) idToRow[row[idCol]] = i + 2; });
-    const newRows = [];
+    const idToIndex = {};
+    all.forEach((row, i) => { if (row[idCol]) idToIndex[row[idCol]] = i; });
     const ts = new Date();
     students.forEach(s => {
-      const ri = idToRow[s.studentId];
-      if (ri) {
-        sheet.getRange(ri, nameCol + 1).setValue(s.studentName);
-        sheet.getRange(ri, classCol + 1).setValue(s.class);
+      const rowIndex = idToIndex[s.studentId];
+      if (rowIndex != null) {
+        if (all[rowIndex][2] != schoolId) throw new Error('A student row does not belong to the selected school.');
+        all[rowIndex][nameCol] = s.studentName;
+        all[rowIndex][classCol] = s.class;
       } else {
-        newRows.push(['STU-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000), s.studentName, schoolId, s.class, ts]);
+        const row = new Array(headers.length).fill('');
+        row[idCol] = 'STU-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+        row[nameCol] = s.studentName;
+        row[2] = schoolId;
+        row[classCol] = s.class;
+        if (headers.length > 4) row[4] = ts;
+        all.push(row);
       }
     });
-    if (newRows.length > 0) sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
+    const output = [headers].concat(all);
+    sheet.getDataRange().clearContent();
+    sheet.getRange(1, 1, output.length, headers.length).setValues(output);
     return { success: true, message: 'Students saved successfully!' };
   } catch (e) { Logger.log(e); return { success: false, message: e.message }; }
   finally { lock.releaseLock(); }

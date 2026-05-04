@@ -506,6 +506,10 @@ let kpiMaster = [];
 let studentsList = [];
 let geoData = { regions: [], chapters: {} };
 let mgmtData = { schools: [], volunteers: [], mappings: [] };
+let assessmentSchools = [];
+let assessmentViewLoaded = false;
+let managementViewLoaded = false;
+let assessmentClassStudentsBySchool = {};
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CONFIRMATION MODAL
@@ -563,6 +567,18 @@ function withLoading(promise, message = 'Loading...') {
   return promise.finally(() => hideLoading());
 }
 
+function callServer(fnName, ...args) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(reject)[fnName](...args);
+  });
+}
+
+function hasManagementData() {
+  return managementViewLoaded && Array.isArray(mgmtData.schools);
+}
+
 function refreshManagementData() {
   return new Promise((resolve, reject) => {
     google.script.run
@@ -571,6 +587,7 @@ function refreshManagementData() {
           const { schools, volunteers, mappings, geoData: geo } = data;
           mgmtData = { schools, volunteers, mappings };
           geoData = geo;
+          managementViewLoaded = true;
           setCachedGeoData(geo);
           resolve(data);
         } else {
@@ -793,48 +810,44 @@ function handlePinSubmit() {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  ASSESSMENT
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-function loadAssessmentView() {
+function loadAssessmentView(forceReset = false) {
+  if (assessmentViewLoaded && !forceReset) {
+    switchView('assessmentView');
+    return;
+  }
+
   document.getElementById('student-grid-container').style.display = 'none';
   document.getElementById('validation-error').style.display = 'none';
-  document.getElementById('schoolSelect').innerHTML = '';
+  document.getElementById('schoolSelect').value = '';
   document.getElementById('classSelect').innerHTML = '<option value="">--Select Class--</option>';
   document.getElementById('assessmentTypeSelect').value = '';
-  showLoading('Loading assessment data...');
 
-  if (currentUser.role === 'Volunteer') {
-    google.script.run
-      .withSuccessHandler(schools => {
-        const sel = document.getElementById('schoolSelect');
-        sel.innerHTML = '<option value="">--Select School--</option>';
-        schools.forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
-        sel.onchange = handleSchoolChange;
-        document.getElementById('classSelect').addEventListener('change', clearStudentGrid);
-        hideLoading();
-        switchView('assessmentView');
-      })
-      .withFailureHandler(err => {
-        hideLoading();
-        showError(err);
-      })
-      .getMappedSchoolsForVolunteer(sessionToken, currentUser.email);
-  } else {
-    // Admin/Supervisor: show all scoped schools via management data
-    google.script.run
-      .withSuccessHandler(data => {
-        const sel = document.getElementById('schoolSelect');
-        sel.innerHTML = '<option value="">--Select School--</option>';
-        (data.schools || []).forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
-        sel.onchange = handleSchoolChange;
-        document.getElementById('classSelect').addEventListener('change', clearStudentGrid);
-        hideLoading();
-        switchView('assessmentView');
-      })
-      .withFailureHandler(err => {
-        hideLoading();
-        showError(err);
-      })
-      .getDataForManagementView(sessionToken);
+  if (assessmentViewLoaded) {
+    switchView('assessmentView');
+    return;
   }
+
+  showLoading('Loading assessment data...');
+  const schoolsPromise = hasManagementData()
+    ? Promise.resolve(mgmtData.schools)
+    : callServer('getSchoolsForAssessment', sessionToken);
+
+  schoolsPromise
+    .then(schools => {
+      assessmentSchools = schools || [];
+      const sel = document.getElementById('schoolSelect');
+      sel.innerHTML = '<option value="">--Select School--</option>';
+      assessmentSchools.forEach(s => sel.innerHTML += `<option value="${escHtml(s.id)}">${escHtml(s.name)}</option>`);
+      sel.onchange = handleSchoolChange;
+      document.getElementById('classSelect').onchange = clearStudentGrid;
+      assessmentViewLoaded = true;
+      hideLoading();
+      switchView('assessmentView');
+    })
+    .catch(err => {
+      hideLoading();
+      showError(err);
+    });
 }
 
 function clearStudentGrid() {
@@ -866,13 +879,8 @@ async function setupClassDropdown() {
   classSelect.innerHTML = '<option value="">Loading classes...</option>';
 
   try {
-    // Correct way to call the server using a Promise
-    const students = await new Promise((resolve, reject) => {
-      google.script.run
-        .withSuccessHandler(resolve)
-        .withFailureHandler(reject)
-        .getStudentsForSchool(sessionToken, schoolId);
-    });
+    const students = assessmentClassStudentsBySchool[schoolId] || await callServer('getStudentsForSchool', sessionToken, schoolId);
+    assessmentClassStudentsBySchool[schoolId] = students;
     
     const classesSet = new Set(students.map(s => s.class).filter(Boolean));
     
@@ -915,11 +923,8 @@ async function loadStudentGrid(btn) {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
   try {
-    // Correct server call #1
-    const allStudents = await new Promise((resolve, reject) => {
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getStudentsForSchool(sessionToken, schoolId);
-    });
-    const students = allStudents.filter(s => String(s.class).trim() === String(classFilter).trim());
+    const data = await callServer('getAssessmentGridData', sessionToken, schoolId, classFilter, assessmentType);
+    const students = data.students || [];
     
     if (!students.length) {
       errDiv.innerHTML = `No students found in class "<strong>${escHtml(classFilter)}</strong>".`;
@@ -927,40 +932,17 @@ async function loadStudentGrid(btn) {
       return;
     }
     studentsList = students;
-
-    if (assessmentType === 'Midline' || assessmentType === 'Endline') {
-      // Correct server call #2
-      const existingTypes = await new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentTypes(sessionToken, students[0].studentId);
-      });
-      if (assessmentType === 'Midline' && !existingTypes.includes('Baseline')) {
-        errDiv.textContent = 'A Baseline assessment must be completed before a Midline can be entered.';
-        errDiv.style.display = 'block';
-        return;
-      }
-      if (assessmentType === 'Endline' && !existingTypes.includes('Midline')) {
-        errDiv.textContent = 'A Midline assessment must be completed before an Endline can be entered.';
-        errDiv.style.display = 'block';
-        return;
-      }
-    }
-
-    // Correct server call #3
-    const kpis = await new Promise((resolve, reject) => {
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getKpis(sessionToken);
-    });
+    assessmentClassStudentsBySchool[schoolId] = data.allStudentsForSchool || assessmentClassStudentsBySchool[schoolId] || students;
+    const kpis = data.kpis || [];
     kpiMaster = kpis;
+    setCachedKpis(kpis);
     
-    // Correct server call #4
-    const existingDataMap = await new Promise((resolve, reject) => {
-        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentDataForClass(sessionToken, schoolId, classFilter, assessmentType);
-    });
-    
-    renderAssessmentGrid(students, kpis, existingDataMap);
+    renderAssessmentGrid(students, kpis, data.existingDataMap || {});
     document.getElementById('student-grid-container').style.display = 'block';
 
   } catch(err) {
-    showToast(err.message || 'Failed to load student data.', 'danger');
+    errDiv.textContent = err.message || 'Failed to load student data.';
+    errDiv.style.display = 'block';
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Load'; 
@@ -1044,7 +1026,7 @@ function handleSaveAssessments(btn) {
     .withSuccessHandler(res => {
       hideLoading();
       showToast(res.message, res.success ? 'success' : 'danger');
-      if (res.success) loadAssessmentView();
+      if (res.success) loadAssessmentView(true);
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Save Assessments';
     })
@@ -1061,10 +1043,19 @@ function handleSaveAssessments(btn) {
 //  MANAGEMENT
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function loadManagementView() {
+  if (managementViewLoaded) {
+    switchView('manageView');
+    return;
+  }
+
   showLoading('Loading management data...');
   google.script.run
     .withSuccessHandler(data => {
       hideLoading();
+      if (data && data.success === false) {
+        showError(data.message || 'Failed to load management data.');
+        return;
+      }
       setupManagementUI(data);
     })
     .withFailureHandler(err => {
@@ -1078,6 +1069,8 @@ function setupManagementUI(data) {
   const { user, schools, volunteers, mappings, geoData: geo } = data;
   mgmtData = { schools, volunteers, mappings };
   geoData = geo;
+  managementViewLoaded = true;
+  setCachedGeoData(geo);
 
   // Show/hide tabs based on role
   const canManageVols = user.role === 'Admin' || user.role === 'Supervisor' || user.role === 'Coordinator';
@@ -1267,6 +1260,7 @@ function handleAddSchool(btn) {
       if (res.success) {
         showToast(res.message, 'success');
         mgmtData.schools.push(res.school);
+        assessmentViewLoaded = false;
         renderSchoolsTable(mgmtData.schools);
         refreshSchoolSelects();
         ['schoolName','schoolTaluk','schoolDistrict','schoolStrength'].forEach(id => document.getElementById(id).value = '');
@@ -1317,6 +1311,8 @@ function handleDeleteSchool(schoolId, btn) {
               hideLoading();
               if (res.success) {
                 mgmtData.schools = mgmtData.schools.filter(s => s.id !== schoolId);
+                assessmentViewLoaded = false;
+                delete assessmentClassStudentsBySchool[schoolId];
                 renderSchoolsTable(mgmtData.schools);
                 refreshSchoolSelects();
                 showToast('School deleted successfully.', 'success');
@@ -1558,6 +1554,7 @@ function handleMapVolunteer(btn) {
       if (res.success) {
         showToast(res.message, 'success');
         mgmtData.mappings.push(res.mapping);
+        assessmentViewLoaded = false;
         renderMappingsTable(mgmtData.mappings);
         
         // Remove from select lists after successful mapping
@@ -1609,6 +1606,7 @@ function handleDeleteMapping(mappingId, btn) {
           if (res.success) {
             document.getElementById('map-row-' + mappingId).remove();
             mgmtData.mappings = mgmtData.mappings.filter(m => m.mappingId !== mappingId);
+            assessmentViewLoaded = false;
             document.getElementById('mapCountBadge').textContent = mgmtData.mappings.length;
             
             // Re-add to select lists for remapping
@@ -1677,13 +1675,11 @@ function loadManagedStudents() {
 
 function renderManagedStudentGrid(students) {
   const body = document.getElementById('manageStudentTableBody');
-  body.innerHTML = '';
   if (!students.length) {
     body.innerHTML = `<tr id="no-managed-students-row"><td colspan="3" class="text-center text-muted p-3">No students found. Use "Add Rows" to begin.</td></tr>`;
     return;
   }
-  students.forEach(s => {
-    body.innerHTML += `<tr data-id="${s.studentId}">
+  body.innerHTML = students.map(s => `<tr data-id="${escHtml(s.studentId)}">
       <td><input class="form-control form-control-sm student-name" value="${escHtml(s.studentName)}" placeholder="Student name"></td>
       <td><input class="form-control form-control-sm student-class" value="${escHtml(s.class || '')}" placeholder="e.g. 7"></td>
       <td class="text-center">
@@ -1691,8 +1687,7 @@ function renderManagedStudentGrid(students) {
           <i class="bi bi-trash"></i>
         </button>
       </td>
-    </tr>`;
-  });
+    </tr>`).join('');
 }
 
 function addStudentRows() {
@@ -1702,9 +1697,11 @@ function addStudentRows() {
   const body = document.getElementById('manageStudentTableBody');
   const placeholder = document.getElementById('no-managed-students-row');
   if (placeholder) placeholder.remove();
+  let rowsHtml = '';
   for (let i = 0; i < count; i++) {
-    body.innerHTML += `<tr data-id=""><td><input class="form-control form-control-sm student-name" placeholder="Student name"></td><td><input class="form-control form-control-sm student-class" placeholder="e.g. 7"></td><td class="text-center"></td></tr>`;
+    rowsHtml += `<tr data-id=""><td><input class="form-control form-control-sm student-name" placeholder="Student name"></td><td><input class="form-control form-control-sm student-class" placeholder="e.g. 7"></td><td class="text-center"></td></tr>`;
   }
+  body.insertAdjacentHTML('beforeend', rowsHtml);
   countInput.value = '';
 }
 
@@ -1784,7 +1781,10 @@ function saveManagedStudents(btn) {
     .withSuccessHandler(res => {
       hideLoading();
       showToast(res.message, res.success ? 'success' : 'danger');
-      if (res.success) loadManagedStudents();
+      if (res.success) {
+        delete assessmentClassStudentsBySchool[schoolId];
+        loadManagedStudents();
+      }
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save Students';
     })
@@ -1806,12 +1806,12 @@ function setupLiveSearch(searchId, selectId) {
   const input = document.getElementById(searchId);
   const select = document.getElementById(selectId);
   if (!input || !select) return;
-  input.addEventListener('input', () => {
+  input.oninput = () => {
     const term = input.value.toLowerCase();
     Array.from(select.options).forEach(opt => {
       opt.hidden = !opt.text.toLowerCase().includes(term);
     });
-  });
+  };
 }
 
 function escHtml(str) {
