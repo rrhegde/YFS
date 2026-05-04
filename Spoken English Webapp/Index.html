@@ -415,10 +415,10 @@
                     <div class="table-responsive" style="max-height:380px; overflow-y:auto;">
                       <table class="table table-sm table-hover align-middle">
                         <thead class="table-light sticky-top">
-                          <tr><th>Name</th><th>Email</th><th>Chapter</th><th class="text-center">Del</th></tr>
+                          <tr><th>Name</th><th>Email</th><th>Chapter</th><th class="text-center">Credentials</th><th class="text-center">Del</th></tr>
                         </thead>
                         <tbody id="volunteersTableBody">
-                          <tr><td colspan="4" class="text-center text-muted p-3">No volunteers loaded yet.</td></tr>
+                          <tr><td colspan="5" class="text-center text-muted p-3">No volunteers loaded yet.</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -599,10 +599,13 @@ function refreshManagementData() {
   });
 }
 
-function showConfirmModal(title, message, onConfirm) {
+function showConfirmModal(title, message, onConfirm, options = {}) {
   document.getElementById('confirmModalTitle').textContent = title;
   document.getElementById('confirmModalMessage').textContent = message;
   confirmModalCallback = onConfirm;
+  const yesBtn = document.getElementById('confirmModalYesBtn');
+  yesBtn.className = options.confirmClass || 'btn btn-danger';
+  yesBtn.innerHTML = `<i class="bi ${options.confirmIcon || 'bi-trash'} me-1"></i>${options.confirmLabel || 'Delete'}`;
   document.getElementById('confirmModalOverlay').classList.add('active');
 }
 
@@ -1354,7 +1357,7 @@ function renderVolunteersTable(volunteers) {
   const body = document.getElementById('volunteersTableBody');
   document.getElementById('volCountBadge').textContent = volunteers.length;
   if (!volunteers.length) {
-    body.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-3">No volunteers yet.</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-3">No volunteers yet.</td></tr>';
     return;
   }
   body.innerHTML = volunteers.map(v => `
@@ -1363,7 +1366,13 @@ function renderVolunteersTable(volunteers) {
       <td><small class="text-muted">${escHtml(v.email)}</small></td>
       <td>${escHtml(v.chapter||'')}</td>
       <td class="text-center">
-        <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteVolunteer('${escHtml(v.email)}', this)" title="Delete volunteer">
+        <button class="btn btn-outline-primary btn-sm" onclick="handleSendVolunteerCredentials('${escJsString(v.email)}', this)" title="${v.credentialsEmailSentAt ? 'Resend login credentials' : 'Send login credentials'}">
+          <i class="bi bi-envelope${v.credentialsEmailSentAt ? '-check' : ''} me-1"></i>${v.credentialsEmailSentAt ? 'Resend email' : 'Send email'}
+        </button>
+        ${v.credentialsEmailSentAt ? `<div><small class="text-muted">Sent ${escHtml(formatCredentialEmailDate(v.credentialsEmailSentAt))}</small></div>` : ''}
+      </td>
+      <td class="text-center">
+        <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteVolunteer('${escJsString(v.email)}', this)" title="Delete volunteer">
           <i class="bi bi-trash"></i>
         </button>
       </td>
@@ -1378,6 +1387,48 @@ function renderVolunteersTable(volunteers) {
       });
     };
   }
+}
+
+function formatCredentialEmailDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function handleSendVolunteerCredentials(volunteerEmail, btn) {
+  const volunteer = mgmtData.volunteers.find(v => v.email === volunteerEmail);
+  if (!volunteer) return;
+
+  const actionLabel = volunteer.credentialsEmailSentAt ? 'Resend email' : 'Send email';
+  showConfirmModal(
+    actionLabel,
+    `Send login credentials and the app link to ${volunteer.name} at ${volunteer.email}?`,
+    () => {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res.success) {
+            const idx = mgmtData.volunteers.findIndex(v => v.email === volunteerEmail);
+            if (idx !== -1) mgmtData.volunteers[idx] = res.volunteer;
+            renderVolunteersTable(mgmtData.volunteers);
+            showToast(res.message, 'success');
+          } else {
+            showToast(res.message || 'Could not send email.', 'danger');
+            btn.disabled = false;
+            btn.innerHTML = `<i class="bi bi-envelope${volunteer.credentialsEmailSentAt ? '-check' : ''} me-1"></i>${volunteer.credentialsEmailSentAt ? 'Resend email' : 'Send email'}`;
+          }
+        })
+        .withFailureHandler(err => {
+          showToast(err.message, 'danger');
+          btn.disabled = false;
+          btn.innerHTML = `<i class="bi bi-envelope${volunteer.credentialsEmailSentAt ? '-check' : ''} me-1"></i>${volunteer.credentialsEmailSentAt ? 'Resend email' : 'Send email'}`;
+        })
+        .sendVolunteerCredentialsEmail(sessionToken, volunteerEmail);
+    },
+    { confirmLabel: actionLabel, confirmClass: 'btn btn-primary', confirmIcon: 'bi-envelope-fill' }
+  );
 }
 
 function handleAddVolunteer(btn) {
@@ -1816,6 +1867,10 @@ function setupLiveSearch(searchId, selectId) {
 
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escJsString(str) {
+  return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
 </script>
 </body>

@@ -237,7 +237,7 @@ function mapSchoolRow_(row) {
 }
 
 function mapVolunteerRow_(row) {
-  return { id: row[0], name: row[1], email: row[2], region: row[4], chapter: row[5] };
+  return { id: row[0], name: row[1], email: row[2], region: row[4], chapter: row[5], credentialsEmailSentAt: rowValue_(row, 6) };
 }
 
 function getScopedSchoolIds_(schools) {
@@ -299,6 +299,26 @@ function ensureVolunteerAccess_(user, volunteerEmail) {
   const row = rows.find(r => normalizeEmail_(r[2]) === normalizeEmail_(volunteerEmail));
   if (!row || !volunteerInScope_(row, user)) throw new Error('You do not have access to this volunteer.');
   return row;
+}
+
+function ensureVolunteerEmailSentColumn_(sheet) {
+  const headerRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1));
+  const headers = headerRange.getValues()[0];
+  let index = headers.indexOf('CredentialsEmailSentAt');
+  if (index === -1) {
+    index = headers.length;
+    sheet.getRange(1, index + 1).setValue('CredentialsEmailSentAt');
+  }
+  return index;
+}
+
+function getAppUrl_() {
+  try {
+    return ScriptApp.getService().getUrl() || '';
+  } catch (e) {
+    Logger.log('Could not get web app URL: ' + e);
+    return '';
+  }
 }
 
 function ensureStudentAccess_(user, studentId) {
@@ -525,9 +545,77 @@ function addVolunteer(token, volunteerData) {
   ensurePermission_(canManageVolunteers_(user), 'Authorization failed.');
   volunteerData = applyVolunteerScopeDefaults_(user, volunteerData);
   const sheet = SS.getSheetByName(SHEETS.VOLUNTEERS);
+  ensureVolunteerEmailSentColumn_(sheet);
   const newId = 'VOL-' + new Date().getTime();
   sheet.appendRow([newId, volunteerData.name, volunteerData.email, volunteerData.pin, volunteerData.region, volunteerData.chapter]);
-  return { success: true, message: 'Volunteer added successfully!', volunteer: { id: newId, name: volunteerData.name, email: volunteerData.email, region: volunteerData.region, chapter: volunteerData.chapter } };
+  return { success: true, message: 'Volunteer added successfully!', volunteer: { id: newId, name: volunteerData.name, email: volunteerData.email, region: volunteerData.region, chapter: volunteerData.chapter, credentialsEmailSentAt: '' } };
+}
+
+function sendVolunteerCredentialsEmail(token, volunteerEmail) {
+  const user = getSessionUser(token);
+  ensurePermission_(canManageVolunteers_(user), 'Authorization failed.');
+  volunteerEmail = normalizeEmail_(volunteerEmail);
+
+  const sheet = SS.getSheetByName(SHEETS.VOLUNTEERS);
+  const sentAtCol = ensureVolunteerEmailSentColumn_(sheet);
+  const data = sheet.getDataRange().getValues();
+  let volunteerRow = null;
+  let rowNumber = -1;
+
+  for (let i = 1; i < data.length; i++) {
+    if (normalizeEmail_(data[i][2]) === volunteerEmail) {
+      volunteerRow = data[i];
+      rowNumber = i + 1;
+      break;
+    }
+  }
+
+  if (!volunteerRow) return { success: false, message: 'Volunteer not found.' };
+  if (!volunteerInScope_(volunteerRow, user)) throw new Error('You do not have access to this volunteer.');
+
+  const name = rowValue_(volunteerRow, 1);
+  const email = rowValue_(volunteerRow, 2);
+  const pin = rowValue_(volunteerRow, 3);
+  const appUrl = getAppUrl_();
+  const linkText = appUrl || 'Please use the YFS Spoken English Portal link shared by your coordinator.';
+  const subject = 'YFS Spoken English Portal login details';
+  const body = [
+    `Hello ${name || 'Volunteer'},`,
+    '',
+    'Your login details for the YFS Spoken English Portal are below:',
+    '',
+    `App link: ${linkText}`,
+    `Email: ${email}`,
+    `PIN: ${pin}`,
+    '',
+    'Please keep this PIN private.',
+    '',
+    'Regards,',
+    'YFS Spoken English Team'
+  ].join('\n');
+
+  MailApp.sendEmail({
+    to: email,
+    subject,
+    body,
+    name: 'YFS Spoken English Portal'
+  });
+
+  const sentAt = new Date();
+  sheet.getRange(rowNumber, sentAtCol + 1).setValue(sentAt);
+
+  return {
+    success: true,
+    message: 'Credentials email sent successfully.',
+    volunteer: {
+      id: rowValue_(volunteerRow, 0),
+      name,
+      email,
+      region: rowValue_(volunteerRow, 4),
+      chapter: rowValue_(volunteerRow, 5),
+      credentialsEmailSentAt: sentAt.toISOString()
+    }
+  };
 }
 
 function mapVolunteerToSchool(token, mappingData) {
