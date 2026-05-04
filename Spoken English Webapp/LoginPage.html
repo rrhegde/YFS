@@ -85,20 +85,9 @@
         if (response.success) {
           sessionStorage.setItem('yfsSessionToken', response.token);
           sessionStorage.setItem('yfsSessionUser', JSON.stringify(response.user));
-          // On success, load the main app's HTML and replace the page
-          google.script.run
-            .withSuccessHandler(html => {
-              document.open();
-              document.write(html);
-              document.close();
-            })
-            .withFailureHandler(err => {
-              errorDiv.textContent = 'Could not load the application. ' + err.message;
-              errorDiv.style.display = 'block';
-              loginBtn.disabled = false;
-              loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Login';
-            })
-            .loadMainApp(response.token); // Pass token to the main app
+          document.open();
+          document.write(response.html);
+          document.close();
         } else {
           errorDiv.textContent = response.message || 'Invalid email or PIN.';
           errorDiv.style.display = 'block';
@@ -112,7 +101,7 @@
         loginBtn.disabled = false;
         loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Login';
       })
-      .verifyUserCredentials(email, pin);
+      .loginAndLoadApp(email, pin);
   }
 </script>
 </body>

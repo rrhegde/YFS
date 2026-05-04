@@ -7,6 +7,8 @@ const SHEETS = {
   USERS: 'Users', GEO: 'Geo', VOLUNTEERS: 'Volunteers', SCHOOLS: 'Schools',
   MAPPING: 'Mapping', STUDENTS: 'Students', KPI_MASTER: 'KPI_Master', ASSESSMENTS: 'Assessments'
 };
+const DATA_CACHE_TTL_SECONDS = 300; // 5 minutes
+const STUDENT_CACHE_TTL_SECONDS = 600; // 10 minutes
 
 function doGet(e) {
   return HtmlService.createTemplateFromFile('LoginPage')
@@ -45,6 +47,12 @@ function loadMainApp(token) {
   return htmlTemplate.evaluate().getContent();
 }
 
+function loginAndLoadApp(email, pin) {
+  const auth = verifyUserCredentials(email, pin);
+  if (!auth.success) return auth;
+  return Object.assign(auth, { html: loadMainApp(auth.token) });
+}
+
 function getUserDetails(token) {
   try {
     return getSessionUser(token);
@@ -75,6 +83,54 @@ function requireUser_(token) {
   return getSessionUser(token);
 }
 
+function getCachedJson_(key) {
+  const raw = CacheService.getScriptCache().get(key);
+  return raw ? JSON.parse(raw) : null;
+}
+
+function putCachedJson_(key, value, ttlSeconds) {
+  try {
+    const json = JSON.stringify(value);
+    if (json.length > 95000) {
+      Logger.log('Cache put skipped for ' + key + ': value too large');
+      return;
+    }
+    CacheService.getScriptCache().put(key, json, ttlSeconds || DATA_CACHE_TTL_SECONDS);
+  } catch (e) {
+    Logger.log('Cache put skipped for ' + key + ': ' + e);
+  }
+}
+
+function removeCached_(key) {
+  try {
+    CacheService.getScriptCache().remove(key);
+  } catch (e) {
+    Logger.log('Cache remove skipped for ' + key + ': ' + e);
+  }
+}
+
+function getCachedSheetValues_(sheetName) {
+  const key = 'sheet:' + sheetName;
+  const cached = getCachedJson_(key);
+  if (cached) return cached;
+  const values = SS.getSheetByName(sheetName).getDataRange().getValues();
+  putCachedJson_(key, values, DATA_CACHE_TTL_SECONDS);
+  return values;
+}
+
+function invalidateSheetCache_(sheetName) {
+  removeCached_('sheet:' + sheetName);
+}
+
+function invalidateStudentsCache_(schoolId) {
+  invalidateSheetCache_(SHEETS.STUDENTS);
+  if (schoolId) removeCached_('studentsForSchool:' + schoolId);
+}
+
+function invalidateVolunteerCache_() {
+  invalidateSheetCache_(SHEETS.VOLUNTEERS);
+}
+
 
 function normalizeEmail_(email) {
   return String(email || '').trim().toLowerCase();
@@ -85,7 +141,7 @@ function rowValue_(row, index) {
 }
 
 function findUserByEmailAndPin_(email, pin) {
-  const usersData = SS.getSheetByName(SHEETS.USERS).getDataRange().getValues();
+  const usersData = getCachedSheetValues_(SHEETS.USERS);
   for (let i = 1; i < usersData.length; i++) {
     const rowEmail = normalizeEmail_(usersData[i][0]);
     const rowRole = rowValue_(usersData[i], 1);
@@ -101,7 +157,7 @@ function findUserByEmailAndPin_(email, pin) {
     }
   }
 
-  const volData = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
+  const volData = getCachedSheetValues_(SHEETS.VOLUNTEERS);
   for (let i = 1; i < volData.length; i++) {
     const rowEmail = normalizeEmail_(volData[i][2]);
     const rowPin = rowValue_(volData[i], 3);
@@ -120,13 +176,13 @@ function findUserByEmailAndPin_(email, pin) {
 
 function getVerifiedUser(email) {
   email = normalizeEmail_(email);
-  const usersData = SS.getSheetByName(SHEETS.USERS).getDataRange().getValues();
+  const usersData = getCachedSheetValues_(SHEETS.USERS);
   for (let i = 1; i < usersData.length; i++) {
     if (normalizeEmail_(usersData[i][0]) === email) {
       return attachScope_({ email: rowValue_(usersData[i], 0), role: rowValue_(usersData[i], 1), assignedRegion: rowValue_(usersData[i], 3), assignedChapter: rowValue_(usersData[i], 4) });
     }
   }
-  const volData = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
+  const volData = getCachedSheetValues_(SHEETS.VOLUNTEERS);
   for (let i = 1; i < volData.length; i++) {
     if (normalizeEmail_(volData[i][2]) === email) {
       return attachScope_({ email: rowValue_(volData[i], 2), role: 'Volunteer', assignedRegion: rowValue_(volData[i], 4), assignedChapter: rowValue_(volData[i], 5) });
@@ -245,7 +301,7 @@ function getScopedSchoolIds_(schools) {
 }
 
 function getMappedSchoolIdsForVolunteer_(volunteerEmail) {
-  const mappingRows = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
+  const mappingRows = getCachedSheetValues_(SHEETS.MAPPING);
   return new Set(
     mappingRows
       .slice(1)
@@ -285,7 +341,7 @@ function applyVolunteerScopeDefaults_(user, volunteerData) {
 }
 
 function ensureSchoolAccess_(user, schoolId) {
-  const rows = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
+  const rows = getCachedSheetValues_(SHEETS.SCHOOLS);
   const row = rows.find(r => r[0] == schoolId);
   if (!row || !schoolInScope_(row, user)) throw new Error('You do not have access to this school.');
   if (isVolunteer_(user) && !getMappedSchoolIdsForVolunteer_(user.email).has(row[0])) {
@@ -295,7 +351,7 @@ function ensureSchoolAccess_(user, schoolId) {
 }
 
 function ensureVolunteerAccess_(user, volunteerEmail) {
-  const rows = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
+  const rows = getCachedSheetValues_(SHEETS.VOLUNTEERS);
   const row = rows.find(r => normalizeEmail_(r[2]) === normalizeEmail_(volunteerEmail));
   if (!row || !volunteerInScope_(row, user)) throw new Error('You do not have access to this volunteer.');
   return row;
@@ -322,7 +378,7 @@ function getAppUrl_() {
 }
 
 function ensureStudentAccess_(user, studentId) {
-  const rows = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
+  const rows = getCachedSheetValues_(SHEETS.STUDENTS);
   const row = rows.find(r => r[0] === studentId);
   if (!row) throw new Error('Student not found.');
   ensureSchoolAccess_(user, row[2]);
@@ -335,7 +391,7 @@ function getGeoData(token) {
 }
 
 function getGeoData_() {
-  const data = SS.getSheetByName(SHEETS.GEO).getDataRange().getValues();
+  const data = getCachedSheetValues_(SHEETS.GEO);
   data.shift();
   const regionsSet = new Set();
   const chapters = {};
@@ -356,7 +412,7 @@ function getKpis(token) {
 }
 
 function getKpis_() {
-  const data = SS.getSheetByName(SHEETS.KPI_MASTER).getDataRange().getValues();
+  const data = getCachedSheetValues_(SHEETS.KPI_MASTER);
   data.shift();
   return data.map(row => ({ id: row[0], name: row[1] })).filter(k => k.id || k.name);
 }
@@ -365,7 +421,7 @@ function getMappedSchoolsForVolunteer(token, volunteerEmail) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
   volunteerEmail = isVolunteer_(user) ? user.email : (volunteerEmail || user.email);
-  const schoolsData = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
+  const schoolsData = getCachedSheetValues_(SHEETS.SCHOOLS);
   const ids = Array.from(getMappedSchoolIdsForVolunteer_(volunteerEmail));
   return schoolsData.slice(1).filter(r => ids.includes(r[0]) && schoolInScope_(r, user)).map(r => ({ id: r[0], name: r[1] }));
 }
@@ -373,7 +429,7 @@ function getMappedSchoolsForVolunteer(token, volunteerEmail) {
 function getSchoolsForAssessment(token) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
-  const schoolsData = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
+  const schoolsData = getCachedSheetValues_(SHEETS.SCHOOLS);
   return filterSchoolsForUser_(schoolsData.slice(1), user).map(r => ({ id: r[0], name: r[1] }));
 }
 
@@ -381,18 +437,38 @@ function getStudentsForSchool(token, schoolId) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user) || canManageStudents_(user), 'Authorization failed.');
   ensureSchoolAccess_(user, schoolId);
-  const data = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
-  data.shift();
-  return data.filter(r => r[2] == schoolId).map(r => ({ studentId: r[0], studentName: r[1], class: r[3] }));
+  return getStudentsForSchool_(schoolId);
 }
 
 function getStudentsBySchool(token, schoolId) { return getStudentsForSchool(token, schoolId); }
+
+function getClassesForSchool(token, schoolId) {
+  const students = getStudentsForSchool(token, schoolId);
+  const classes = {};
+  students.forEach(student => {
+    const classValue = rowValue_([student.class], 0);
+    if (classValue) classes[classValue] = true;
+  });
+  return Object.keys(classes).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+}
+
+function getStudentsForSchool_(schoolId) {
+  const key = 'studentsForSchool:' + schoolId;
+  const cached = getCachedJson_(key);
+  if (cached) return cached;
+  const data = getCachedSheetValues_(SHEETS.STUDENTS);
+  const students = data.slice(1)
+    .filter(r => r[2] == schoolId)
+    .map(r => ({ studentId: r[0], studentName: r[1], class: r[3] }));
+  putCachedJson_(key, students, STUDENT_CACHE_TTL_SECONDS);
+  return students;
+}
 
 function getExistingAssessmentTypes(token, studentId) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
   ensureStudentAccess_(user, studentId);
-  const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+  const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
   const types = new Set();
   for (let i = 1; i < data.length; i++) if (data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
   return Array.from(types);
@@ -402,7 +478,7 @@ function getExistingAssessmentScores(token, studentId, assessmentType) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
   ensureStudentAccess_(user, studentId);
-  const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+  const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
   const scores = [];
   for (let i = 1; i < data.length; i++) if (data[i][1] == studentId && data[i][4] === assessmentType && data[i][7] === 'Present') scores.push({ kpiId: data[i][5], score: data[i][6] });
   return scores;
@@ -411,8 +487,8 @@ function getExistingAssessmentScores(token, studentId, assessmentType) {
 function getExistingAssessmentDataForClass(token, schoolId, classValue, assessmentType) {
   const user = getSessionUser(token);
   ensureSchoolAccess_(user, schoolId);
-  const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
-  const studentsData = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
+  const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
+  const studentsData = getCachedSheetValues_(SHEETS.STUDENTS);
   const studentClassMap = {};
   for (let i = 1; i < studentsData.length; i++) if (studentsData[i][0] && studentsData[i][2] == schoolId) studentClassMap[studentsData[i][0]] = studentsData[i][3];
   const result = {};
@@ -431,19 +507,14 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   ensurePermission_(canAssess_(user), 'Authorization failed.');
   ensureSchoolAccess_(user, schoolId);
 
-  const studentsRows = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
-  const allStudentsForSchool = [];
+  const allStudentsForSchool = getStudentsForSchool_(schoolId);
   const students = [];
   const studentClassMap = {};
 
-  for (let i = 1; i < studentsRows.length; i++) {
-    const row = studentsRows[i];
-    if (row[2] != schoolId) continue;
-    const student = { studentId: row[0], studentName: row[1], class: row[3] };
-    allStudentsForSchool.push(student);
-    studentClassMap[row[0]] = row[3];
-    if (String(row[3]).trim() === String(classValue).trim()) students.push(student);
-  }
+  allStudentsForSchool.forEach(student => {
+    studentClassMap[student.studentId] = student.class;
+    if (String(student.class).trim() === String(classValue).trim()) students.push(student);
+  });
 
   if (!students.length) {
     return { students: [], allStudentsForSchool, kpis: getKpis_(), existingDataMap: {} };
@@ -458,7 +529,7 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   }
 
   const kpis = getKpis_();
-  const assessments = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+  const assessments = getCachedSheetValues_(SHEETS.ASSESSMENTS);
   const result = {};
   for (let i = 1; i < assessments.length; i++) {
     const row = assessments[i];
@@ -473,7 +544,7 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
 }
 
 function getAssessmentTypesForStudent_(studentId) {
-  const data = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+  const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
   const types = new Set();
   for (let i = 1; i < data.length; i++) {
     if (data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
@@ -510,6 +581,7 @@ function saveAssessments(token, assessmentData) {
     if (output.length > 0 && output[0].length > 0) {
       sheet.getRange(1, 1, output.length, output[0].length).setValues(output);
     }
+    invalidateSheetCache_(SHEETS.ASSESSMENTS);
     return { success: true, message: 'Assessments saved successfully!' };
   } catch (e) { Logger.log(e); return { success: false, message: e.message }; }
   finally { lock.releaseLock(); }
@@ -518,9 +590,9 @@ function saveAssessments(token, assessmentData) {
 function getDataForManagementView(token) {
   const user = getSessionUser(token);
   ensurePermission_(canViewManagement_(user), 'Authorization failed.');
-  const schoolsRaw = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues(); schoolsRaw.shift();
-  const volRaw = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues(); volRaw.shift();
-  const mappingRaw = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues(); mappingRaw.shift();
+  const schoolsRaw = getCachedSheetValues_(SHEETS.SCHOOLS).slice(1);
+  const volRaw = getCachedSheetValues_(SHEETS.VOLUNTEERS).slice(1);
+  const mappingRaw = getCachedSheetValues_(SHEETS.MAPPING).slice(1);
   const schools = filterSchoolsForUser_(schoolsRaw, user).map(mapSchoolRow_);
   const volunteers = canManageVolunteers_(user) ? filterVolunteersByScope_(volRaw, user).map(mapVolunteerRow_) : [];
   const schoolMap = {}; schoolsRaw.forEach(r => { schoolMap[r[0]] = r[1]; });
@@ -537,6 +609,7 @@ function addSchool(token, schoolData) {
   const sheet = SS.getSheetByName(SHEETS.SCHOOLS);
   const newId = 'SCH-' + new Date().getTime();
   sheet.appendRow([newId, schoolData.name, schoolData.region, schoolData.chapter, schoolData.taluk, schoolData.district, schoolData.strength]);
+  invalidateSheetCache_(SHEETS.SCHOOLS);
   return { success: true, message: 'School added successfully!', school: { id: newId, name: schoolData.name, region: schoolData.region, chapter: schoolData.chapter, taluk: schoolData.taluk, district: schoolData.district, strength: schoolData.strength } };
 }
 
@@ -548,6 +621,7 @@ function addVolunteer(token, volunteerData) {
   ensureVolunteerEmailSentColumn_(sheet);
   const newId = 'VOL-' + new Date().getTime();
   sheet.appendRow([newId, volunteerData.name, volunteerData.email, volunteerData.pin, volunteerData.region, volunteerData.chapter]);
+  invalidateVolunteerCache_();
   return { success: true, message: 'Volunteer added successfully!', volunteer: { id: newId, name: volunteerData.name, email: volunteerData.email, region: volunteerData.region, chapter: volunteerData.chapter, credentialsEmailSentAt: '' } };
 }
 
@@ -603,6 +677,7 @@ function sendVolunteerCredentialsEmail(token, volunteerEmail) {
 
   const sentAt = new Date();
   sheet.getRange(rowNumber, sentAtCol + 1).setValue(sentAt);
+  invalidateVolunteerCache_();
 
   return {
     success: true,
@@ -629,16 +704,17 @@ function mapVolunteerToSchool(token, mappingData) {
   if (existing.some(r => normalizeEmail_(r[1]) === normalizeEmail_(mappingData.volunteerEmail))) return { success: false, message: 'This volunteer is already mapped to a school. Remove that mapping first.' };
   const newId = 'MAP-' + new Date().getTime();
   sheet.appendRow([newId, mappingData.volunteerEmail, mappingData.schoolId]);
-  const schoolRow = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues().find(r => r[0] === mappingData.schoolId);
+  invalidateSheetCache_(SHEETS.MAPPING);
+  const schoolRow = getCachedSheetValues_(SHEETS.SCHOOLS).find(r => r[0] === mappingData.schoolId);
   return { success: true, message: 'Mapping created successfully!', mapping: { mappingId: newId, volunteerEmail: mappingData.volunteerEmail, volunteerName: volRow ? volRow[1] : mappingData.volunteerEmail, schoolId: mappingData.schoolId, schoolName: schoolRow ? schoolRow[1] : mappingData.schoolId } };
 }
 
 function canDeleteSchool(token, schoolId) {
   const user = getSessionUser(token);
   ensureSchoolAccess_(user, schoolId);
-  const studentsData = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
+  const studentsData = getCachedSheetValues_(SHEETS.STUDENTS);
   if (studentsData.slice(1).some(r => r[2] === schoolId && r[0])) return { canDelete: false, reason: 'Students exist for this school. Please delete all students first.' };
-  const mappingData = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
+  const mappingData = getCachedSheetValues_(SHEETS.MAPPING);
   if (mappingData.slice(1).some(r => r[2] === schoolId && r[0])) return { canDelete: false, reason: 'This school is mapped to a volunteer. Please remove the mapping first.' };
   return { canDelete: true };
 }
@@ -650,7 +726,7 @@ function deleteSchool(token, schoolId) {
   if (!validation.canDelete) return { success: false, message: validation.reason };
   const sheet = SS.getSheetByName(SHEETS.SCHOOLS);
   const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) if (data[i][0] === schoolId) { sheet.deleteRow(i + 1); return { success: true }; }
+  for (let i = 1; i < data.length; i++) if (data[i][0] === schoolId) { sheet.deleteRow(i + 1); invalidateSheetCache_(SHEETS.SCHOOLS); return { success: true }; }
   return { success: false, message: 'School not found.' };
 }
 
@@ -659,7 +735,7 @@ function deleteMapping(token, mappingId) {
   ensurePermission_(canManageMappings_(user), 'Authorization failed.');
   const sheet = SS.getSheetByName(SHEETS.MAPPING);
   const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) if (data[i][0] === mappingId) { ensureSchoolAccess_(user, data[i][2]); sheet.deleteRow(i + 1); return { success: true }; }
+  for (let i = 1; i < data.length; i++) if (data[i][0] === mappingId) { ensureSchoolAccess_(user, data[i][2]); sheet.deleteRow(i + 1); invalidateSheetCache_(SHEETS.MAPPING); return { success: true }; }
   return { success: false, message: 'Mapping not found.' };
 }
 
@@ -667,7 +743,7 @@ function canDeleteVolunteer(token, volunteerEmail) {
   const user = getSessionUser(token);
   ensurePermission_(canManageVolunteers_(user), 'Authorization failed.');
   ensureVolunteerAccess_(user, volunteerEmail);
-  const mappingData = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
+  const mappingData = getCachedSheetValues_(SHEETS.MAPPING);
   if (mappingData.slice(1).some(r => normalizeEmail_(r[1]) === normalizeEmail_(volunteerEmail) && r[0])) return { canDelete: false, reason: 'This volunteer is mapped to a school. Please remove the mapping first.' };
   return { canDelete: true };
 }
@@ -677,7 +753,7 @@ function deleteVolunteer(token, volunteerEmail) {
   if (!validation.canDelete) return { success: false, message: validation.reason };
   const sheet = SS.getSheetByName(SHEETS.VOLUNTEERS);
   const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) if (normalizeEmail_(data[i][2]) === normalizeEmail_(volunteerEmail)) { sheet.deleteRow(i + 1); return { success: true }; }
+  for (let i = 1; i < data.length; i++) if (normalizeEmail_(data[i][2]) === normalizeEmail_(volunteerEmail)) { sheet.deleteRow(i + 1); invalidateVolunteerCache_(); return { success: true }; }
   return { success: false, message: 'Volunteer not found.' };
 }
 
@@ -715,6 +791,7 @@ function saveOrUpdateStudents(token, students, schoolId) {
     const output = [headers].concat(all);
     sheet.getDataRange().clearContent();
     sheet.getRange(1, 1, output.length, headers.length).setValues(output);
+    invalidateStudentsCache_(schoolId);
     return { success: true, message: 'Students saved successfully!' };
   } catch (e) { Logger.log(e); return { success: false, message: e.message }; }
   finally { lock.releaseLock(); }
@@ -724,7 +801,7 @@ function canDeleteStudent(token, studentId) {
   const user = getSessionUser(token);
   ensurePermission_(canManageStudents_(user), 'Authorization failed.');
   ensureStudentAccess_(user, studentId);
-  const assessmentsData = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+  const assessmentsData = getCachedSheetValues_(SHEETS.ASSESSMENTS);
   if (assessmentsData.slice(1).some(r => r[1] === studentId && r[0])) return { canDelete: false, reason: 'Assessment records exist for this student. Please delete assessment records first.' };
   return { canDelete: true };
 }
@@ -737,7 +814,9 @@ function deleteStudent(token, studentId) {
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === studentId) {
+      const schoolId = data[i][2];
       sheet.deleteRow(i + 1);
+      invalidateStudentsCache_(schoolId);
       return { success: true };
     }
   }
@@ -755,9 +834,9 @@ const CACHE_VERSION = '1.0';
 
 function getDashboardStats(user) {
   try {
-    const schoolsData = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
-    const studentsData = SS.getSheetByName(SHEETS.STUDENTS).getDataRange().getValues();
-    const assessmentsData = SS.getSheetByName(SHEETS.ASSESSMENTS).getDataRange().getValues();
+    const schoolsData = getCachedSheetValues_(SHEETS.SCHOOLS);
+    const studentsData = getCachedSheetValues_(SHEETS.STUDENTS);
+    const assessmentsData = getCachedSheetValues_(SHEETS.ASSESSMENTS);
     
     const scopedSchools = filterSchoolsByScope_(schoolsData.slice(1), user);
     const scopedSchoolIds = new Set(scopedSchools.map(s => s[0]));
@@ -829,18 +908,15 @@ function getAppData(sessionToken) {
     const geoData = getGeoData(sessionToken);
     const kpis = getKpis(sessionToken);
     
-    // Get operational data (user-scoped, not cached)
-    const schoolsRaw = SS.getSheetByName(SHEETS.SCHOOLS).getDataRange().getValues();
-    schoolsRaw.shift();
+    // Get operational data (user-scoped)
+    const schoolsRaw = getCachedSheetValues_(SHEETS.SCHOOLS).slice(1);
     const schools = filterSchoolsForUser_(schoolsRaw, user).map(mapSchoolRow_);
     
-    const volRaw = SS.getSheetByName(SHEETS.VOLUNTEERS).getDataRange().getValues();
-    volRaw.shift();
+    const volRaw = getCachedSheetValues_(SHEETS.VOLUNTEERS).slice(1);
     const volunteers = canManageVolunteers_(user) ? filterVolunteersByScope_(volRaw, user).map(mapVolunteerRow_) : [];
     
     // Get mappings
-    const mappingRaw = SS.getSheetByName(SHEETS.MAPPING).getDataRange().getValues();
-    mappingRaw.shift();
+    const mappingRaw = getCachedSheetValues_(SHEETS.MAPPING).slice(1);
     const schoolMap = {};
     schoolsRaw.forEach(r => { schoolMap[r[0]] = r[1]; });
     const volMap = {};

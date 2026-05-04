@@ -974,17 +974,13 @@ async function setupClassDropdown() {
   classSelect.innerHTML = '<option value="">Loading classes...</option>';
 
   try {
-    const students = assessmentClassStudentsBySchool[schoolId] || await callServer('getStudentsForSchool', sessionToken, schoolId);
-    assessmentClassStudentsBySchool[schoolId] = students;
+    const classes = await callServer('getClassesForSchool', sessionToken, schoolId);
     
-    const classesSet = new Set(students.map(s => s.class).filter(Boolean));
-    
-    if(classesSet.size === 0) {
+    if(!classes.length) {
       classSelect.innerHTML = '<option value="">No classes found</option>';
       return; 
     }
 
-    const classes = Array.from(classesSet).sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true}));
     classSelect.innerHTML = '<option value="">--Select Class--</option>';
     classes.forEach(c => classSelect.innerHTML += `<option value="${escHtml(c)}">${escHtml(c)}</option>`);
   } catch (err) {
