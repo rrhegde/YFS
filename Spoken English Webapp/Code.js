@@ -21,6 +21,12 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+function getLoginPageHtml() {
+  return HtmlService.createTemplateFromFile('LoginPage')
+    .evaluate()
+    .getContent();
+}
+
 function verifyUserCredentials(email, pin) {
   try {
     email = normalizeEmail_(email);
@@ -81,6 +87,11 @@ function getSessionUser(token) {
 
 function requireUser_(token) {
   return getSessionUser(token);
+}
+
+function logoutAndGetLoginPage(token) {
+  if (token) removeCached_('session:' + token);
+  return { success: true, url: getAppUrl_(), html: getLoginPageHtml() };
 }
 
 function getCachedJson_(key) {
@@ -368,6 +379,18 @@ function ensureVolunteerEmailSentColumn_(sheet) {
   return index;
 }
 
+function ensureStudentGenderColumn_(sheet) {
+  const headerRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1));
+  const headers = headerRange.getValues()[0];
+  let index = headers.indexOf('Gender');
+  if (index === -1) {
+    index = headers.length;
+    sheet.getRange(1, index + 1).setValue('Gender');
+    invalidateSheetCache_(SHEETS.STUDENTS);
+  }
+  return index;
+}
+
 function getAppUrl_() {
   try {
     return ScriptApp.getService().getUrl() || '';
@@ -457,9 +480,11 @@ function getStudentsForSchool_(schoolId) {
   const cached = getCachedJson_(key);
   if (cached) return cached;
   const data = getCachedSheetValues_(SHEETS.STUDENTS);
+  const headers = data[0] || [];
+  const genderCol = headers.indexOf('Gender');
   const students = data.slice(1)
     .filter(r => r[2] == schoolId)
-    .map(r => ({ studentId: r[0], studentName: r[1], class: r[3] }));
+    .map(r => ({ studentId: r[0], studentName: r[1], class: r[3], gender: genderCol === -1 ? '' : r[genderCol] }));
   putCachedJson_(key, students, STUDENT_CACHE_TTL_SECONDS);
   return students;
 }
@@ -573,7 +598,10 @@ function saveAssessments(token, assessmentData) {
     assessmentData.forEach(item => {
       const { studentId, schoolId, assessmentType, status, scores } = item;
       if (status === 'Absent') rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', ts]);
-      else scores.forEach(s => rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, s.score, 'Present', ts]));
+      else scores.forEach(s => {
+        const score = parseInt(s.score, 10);
+        if (score >= 1 && score <= 5) rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, score, 'Present', ts]);
+      });
     });
     const keptRows = allData.slice(1).filter(row => !toDelete.has(`${row[1]}|${row[2]}|${row[4]}`));
     const output = [header].concat(keptRows, rows);
@@ -765,10 +793,11 @@ function saveOrUpdateStudents(token, students, schoolId) {
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy, please try again.' };
   try {
     const sheet = SS.getSheetByName(SHEETS.STUDENTS);
+    ensureStudentGenderColumn_(sheet);
     const all = sheet.getDataRange().getValues();
     const headers = all.shift();
-    const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class');
-    if ([idCol, nameCol, classCol].includes(-1)) throw new Error('Required column missing in Students sheet.');
+    const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class'), genderCol = headers.indexOf('Gender');
+    if ([idCol, nameCol, classCol, genderCol].includes(-1)) throw new Error('Required column missing in Students sheet.');
     const idToIndex = {};
     all.forEach((row, i) => { if (row[idCol]) idToIndex[row[idCol]] = i; });
     const ts = new Date();
@@ -778,12 +807,14 @@ function saveOrUpdateStudents(token, students, schoolId) {
         if (all[rowIndex][2] != schoolId) throw new Error('A student row does not belong to the selected school.');
         all[rowIndex][nameCol] = s.studentName;
         all[rowIndex][classCol] = s.class;
+        all[rowIndex][genderCol] = s.gender || '';
       } else {
         const row = new Array(headers.length).fill('');
         row[idCol] = 'STU-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
         row[nameCol] = s.studentName;
         row[2] = schoolId;
         row[classCol] = s.class;
+        row[genderCol] = s.gender || '';
         if (headers.length > 4) row[4] = ts;
         all.push(row);
       }
