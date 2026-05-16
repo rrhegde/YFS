@@ -1,967 +1,1940 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
-   <head>
-      <base target="_top">
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-      <?!= include('Styles'); ?>
-   </head>
-   <body>
-      <!-- Main App Container -->
-      <div class="d-flex" id="app-wrapper">
-         <!-- Sidebar -->
-         <nav class="sidebar bg-light border-end" id="sidebar">
-            <div class="sidebar-header border-bottom">
-               <!-- Placeholder for Logo -->
-               <a href="#" class="d-flex align-items-center text-decoration-none p-3" onclick="switchView('dashboardView'); return false;">
-               <i class="bi bi-book-half fs-4 me-2"></i>
-               <span class="fs-5 fw-semibold">Spoken English</span>
-               </a>
-            </div>
-            <div class="list-group list-group-flush">
-               <!-- Navigation links will be dynamically shown based on role -->
-               <a href="#" class="list-group-item list-group-item-action" onclick="switchView('dashboardView'); return false;" id="nav-dashboard">
-               <i class="bi bi-grid-1x2-fill me-2"></i> Dashboard
-               </a>
-               <a href="#" class="list-group-item list-group-item-action" onclick="loadAssessmentView(); return false;" id="nav-assessment">
-               <i class="bi bi-card-checklist me-2"></i> Assessment
-               </a>
-               <a href="#" class="list-group-item list-group-item-action" onclick="loadManagementView(); return false;" id="nav-manage" style="display: none;">
-               <i class="bi bi-people-fill me-2"></i> Manage
-               </a>
-            </div>
-         </nav>
-         <!-- Page Content -->
-         <main class="main-content flex-grow-1">
-            <div class="container-fluid p-4">
-               <!-- Loading Spinner View -->
-               <div id="loadingView" class="view">
-                  <div class="d-flex justify-content-center align-items-center" style="height: 80vh;">
-                     <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                     </div>
-                  </div>
-               </div>
-               <!-- PIN Entry View -->
-               <div id="pinView" class="view" style="display: none;">
-                  <div class="row justify-content-center mt-5">
-                     <div class="col-md-6 col-lg-4">
-                        <div class="card shadow-sm">
-                           <div class="card-body p-4">
-                              <h3 class="card-title text-center mb-4">Volunteer Login</h3>
-                              <p class="text-center text-muted">Enter your PIN to continue.</p>
-                              <div class="mb-3">
-                                 <input type="password" id="pinInput" class="form-control form-control-lg text-center" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code">
-                              </div>
-                              <div class="d-grid">
-                                 <button class="btn btn-primary btn-lg" onclick="handlePinSubmit()">Unlock</button>
-                              </div>
-                              <div id="pinError" class="text-danger mt-3 text-center" style="display: none;">Invalid PIN.</div>
-                           </div>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-               <!-- Dashboard View -->
-               <div id="dashboardView" class="view" style="display: none;">
-                  <h1 class="mb-4">Dashboard</h1>
-                  <p>Welcome, <span id="userEmail" class="fw-bold"></span>!</p>
-                  <p>Your role is: <span id="userRole" class="badge bg-success"></span></p>
-                  <!-- Summary cards would go here -->
-                  <div class="row">
-                     <div class="col-md-4 mb-3">
-                        <div class="card text-center">
-                           <div class="card-body">
-                              <h5 class="card-title">Schools</h5>
-                              <p class="card-text fs-1">--</p>
-                           </div>
-                        </div>
-                     </div>
-                     <div class="col-md-4 mb-3">
-                        <div class="card text-center">
-                           <div class="card-body">
-                              <h5 class="card-title">Students</h5>
-                              <p class="card-text fs-1">--</p>
-                           </div>
-                        </div>
-                     </div>
-                     <div class="col-md-4 mb-3">
-                        <div class="card text-center">
-                           <div class="card-body">
-                              <h5 class="card-title">Assessments</h5>
-                              <p class="card-text fs-1">--</p>
-                           </div>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-               <!-- Assessment View -->
-               <div id="assessmentView" class="view" style="display: none;">
-                  <h1 class="mb-4">Student Assessment</h1>
-                  <div class="card shadow-sm">
-                     <div class="card-body">
-                        <!-- Step 1: Select School & Type -->
-                        <div class="row g-3" id="assessment-setup">
-                           <div class="col-md-6">
-                              <label for="schoolSelect" class="form-label">Select School</label>
-                              <select id="schoolSelect" class="form-select"></select>
-                           </div>
-                           <div class="col-md-4">
-                              <label for="assessmentTypeSelect" class="form-label">Assessment Type</label>
-                              <select id="assessmentTypeSelect" class="form-select">
-                                 <option value="">--Select Type--</option>
-                                 <option value="Baseline">Baseline</option>
-                                 <option value="Midline">Midline</option>
-                                 <option value="Endline">Endline</option>
-                              </select>
-                           </div>
-                           <div class="col-md-2 d-flex align-items-end">
-                              <button class="btn btn-primary w-100" onclick="loadStudentGrid()">Load Students</button>
-                           </div>
-                        </div>
-                        <div id="validation-error" class="alert alert-danger mt-3" style="display:none;"></div>
-                        <!-- Step 2: Student Grid -->
-                        <div id="student-grid-container" class="mt-4" style="display: none;">
-                           <div class="table-responsive">
-                              <table class="table table-bordered table-hover">
-                                 <thead id="assessment-grid-head"></thead>
-                                 <tbody id="assessment-grid-body"></tbody>
-                              </table>
-                           </div>
-                           <button class="btn btn-success float-end mt-3" onclick="handleSaveAssessments()">
-                           <i class="bi bi-check-circle-fill me-2"></i> Save Assessments
-                           </button>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-               <!-- Manage View -->
-               <div id="manageView" class="view" style="display: none;">
-                  <h1 class="mb-4">Management</h1>
-                  <div class="card shadow-sm">
-                     <div class="card-header">
-                        <ul class="nav nav-tabs card-header-tabs" id="manageTabs" role="tablist">
-                           <li class="nav-item" role="presentation">
-                              <button class="nav-link active" id="add-school-tab" data-bs-toggle="tab" data-bs-target="#add-school" type="button" role="tab">Add School</button>
-                           </li>
-                           <li class="nav-item" role="presentation">
-                              <button class="nav-link" id="add-volunteer-tab" data-bs-toggle="tab" data-bs-target="#add-volunteer" type="button" role="tab">Add Volunteer</button>
-                           </li>
-                           <li class="nav-item" role="presentation">
-                              <button class="nav-link" id="map-volunteer-tab" data-bs-toggle="tab" data-bs-target="#map-volunteer" type="button" role="tab">Map Volunteer</button>
-                           </li>
-                           <li class="nav-item">
-                              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#manage-students">
-                              Manage Students
-                              </button>
-                           </li>
-                        </ul>
-                     </div>
-                     <div class="card-body">
-                        <div class="tab-content" id="manageTabsContent">
-                           <!-- Add School Form -->
-                           <div class="tab-pane fade show active" id="add-school" role="tabpanel">
-                              <h5 class="mb-3">New School Details</h5>
-                              <form id="formAddSchool" onsubmit="handleAddSchool(event)">
-                                 <div class="row g-3">
-                                    <div class="col-md-6"><label class="form-label">School Name</label><input type="text" id="schoolName" class="form-control" required></div>
-                                    <div class="col-md-6"><label class="form-label">Region</label><input type="text" id="schoolRegion" class="form-control" required></div>
-                                    <div class="col-md-6"><label class="form-label">Chapter</label><input type="text" id="schoolChapter" class="form-control" required></div>
-                                    <div class="col-md-6"><label class="form-label">Taluk</label><input type="text" id="schoolTaluk" class="form-control"></div>
-                                    <div class="col-md-6"><label class="form-label">District</label><input type="text" id="schoolDistrict" class="form-control"></div>
-                                    <div class="col-md-6"><label class="form-label">Total Strength</label><input type="number" id="schoolStrength" class="form-control" required></div>
-                                 </div>
-                                 <button type="submit" class="btn btn-primary mt-4">Add School</button>
-                              </form>
-                           </div>
-                           <!-- Add Volunteer Form -->
-                           <div class="tab-pane fade" id="add-volunteer" role="tabpanel">
-                              <h5 class="mb-3">New Volunteer Details</h5>
-                              <form id="formAddVolunteer" onsubmit="handleAddVolunteer(event)">
-                                 <div class="row g-3">
-                                    <div class="col-md-6"><label class="form-label">Name</label><input type="text" id="volunteerName" class="form-control" required></div>
-                                    <div class="col-md-6"><label class="form-label">Email</label><input type="email" id="volunteerEmail" class="form-control" required></div>
-                                    <div class="col-md-4"><label class="form-label">PIN (4 digits)</label><input type="text" id="volunteerPin" class="form-control" required pattern="\d{4}" title="PIN must be 4 digits."></div>
-                                    <div class="col-md-4"><label class="form-label">Region</label><input type="text" id="volunteerRegion" class="form-control" required></div>
-                                    <div class="col-md-4"><label class="form-label">Chapter</label><input type="text" id="volunteerChapter" class="form-control" required></div>
-                                 </div>
-                                 <button type="submit" class="btn btn-primary mt-4">Add Volunteer</button>
-                              </form>
-                           </div>
-                            <!-- Map Volunteer Form -->
-                            <div class="tab-pane fade" id="map-volunteer" role="tabpanel">
-                                <h5 class="mb-3">Map Volunteer to School</h5>
-                                <form id="formMapVolunteer" onsubmit="handleMapVolunteer(event)">
-                                    <div class="row g-3">
-                                        <div class="col-md-6">
-                                            <label class="form-label">Search & Select Volunteer</label>
-                                            <input type="text" class="form-control mb-2 searchable-dropdown" placeholder="Type to search..." data-target-select="mapVolunteerSelect">
-                                            <select id="mapVolunteerSelect" class="form-select" required size="5"></select>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">Search & Select School</label>
-                                            <input type="text" class="form-control mb-2 searchable-dropdown" placeholder="Type to search..." data-target-select="mapSchoolSelect">
-                                            <select id="mapSchoolSelect" class="form-select" required size="5"></select>
-                                        </div>
-                                    </div>
-                                    <button type="submit" class="btn btn-primary mt-4">Create Mapping</button>
-                                </form>
-                            </div>
-                            <!-- Add Students Form -->
-                            <div class="tab-pane fade" id="manage-students">
-                                <div class="row">
-                                    <div class="col-md-8 col-lg-6">
-                                        <h5 class="mb-3">Select School</h5>
-                                        <!-- The Search Input -->
-                                        <input type="text" class="form-control mb-2 searchable-dropdown" placeholder="Type to search for a school..." data-target-select="manageSchoolSelect">
-                                        
-                                        <!-- The Select Dropdown -->
-                                        <select id="manageSchoolSelect" class="form-select mb-3"></select>
-                                    </div>
-                                </div>
-                                
-                                <button class="btn btn-primary mb-3" onclick="loadManagedStudents(this)">Load Students</button>
-                                
-                                <!-- The container for adding/editing students -->
-                                <div id="manage-students-container" class="mt-3" style="display:none;">
-                                    <!-- The rest of this container remains the same -->
-                                    <div class="d-flex align-items-center mb-3 p-3 bg-light rounded">
-                                        <label for="rowsToAddInput" class="form-label me-2 mb-0">Add:</label>
-                                        <input type="number" id="rowsToAddInput" class="form-control" style="width: 100px;" placeholder="e.g., 5">
-                                        <button class="btn btn-secondary ms-2" onclick="addStudentRows()">Add Rows</button>
-                                    </div>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <?!= include('Styles'); ?>
+</head>
+<body>
 
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered">
-                                            <thead>
-                                                <tr>
-                                                <th>Name</th>
-                                                <th>Class</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="manageStudentTableBody"></tbody>
-                                        </table>
-                                    </div>
-                                    <button class="btn btn-success float-end" onclick="saveManagedStudents(this)">Save Students</button>
-                                </div>
-                            </div>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-               <!-- Unauthorized View -->
-               <div id="unauthorizedView" class="view" style="display: none;">
-                  <div class="alert alert-danger">You are not authorized to access this application.</div>
-               </div>
-            </div>
-         </main>
+<!-- Toast Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index:9999"></div>
+
+<!-- Custom Confirmation Modal -->
+<div class="confirm-modal-overlay" id="confirmModalOverlay">
+  <div class="confirm-modal">
+    <div class="confirm-modal-icon">
+      <i class="bi bi-exclamation-circle"></i>
+    </div>
+    <h4 id="confirmModalTitle">Confirm Action</h4>
+    <p id="confirmModalMessage">Are you sure?</p>
+    <div class="confirm-modal-buttons">
+      <button class="btn btn-danger" id="confirmModalYesBtn" onclick="handleConfirmModalYes()">
+        <i class="bi bi-trash me-1"></i>Delete
+      </button>
+      <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Global Loading Overlay -->
+<div id="loadingOverlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 10000; justify-content: center; align-items: center;">
+  <div style="background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2); text-align: center; max-width: 300px;">
+    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <h5 id="loadingMessage" style="margin: 0; color: var(--text-primary); font-weight: 600;">Loading...</h5>
+  </div>
+</div>
+
+<div class="d-flex" id="app-wrapper">
+  <button class="mobile-nav-toggle" id="mobileNavToggle" type="button" onclick="toggleMobileNav()" aria-label="Open navigation">
+    <i class="bi bi-list"></i>
+  </button>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop" onclick="closeMobileNav()"></div>
+
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <a href="#" class="d-flex align-items-center text-decoration-none" onclick="goHome(); return false;">
+        <div class="logo-container file-input-wrapper">
+          <img id="sidebarLogo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' fill='%232563eb' viewBox='0 0 16 16'%3E%3Cpath d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z'/%3E%3C/svg%3E" class="logo-img" alt="Logo" title="Click to upload logo">
+          <input type="file" id="logoFileInput" accept="image/*" style="display:none;">
+        </div>
+        <div>
+          <div class="sidebar-brand">Spoken English</div>
+          <div class="sidebar-subtitle">Portal</div>
+        </div>
+      </a>
+    </div>
+    <div class="list-group list-group-flush mt-3">
+      <a href="#" class="list-group-item list-group-item-action" onclick="switchView('dashboardView'); closeMobileNav(); return false;" id="nav-dashboard">
+        <i class="bi bi-grid-1x2-fill me-2"></i> Dashboard
+      </a>
+      <a href="#" class="list-group-item list-group-item-action" onclick="loadManagementView(); closeMobileNav(); return false;" id="nav-manage" style="display:none;">
+        <i class="bi bi-people-fill me-2"></i> Manage
+      </a>
+      <a href="#" class="list-group-item list-group-item-action" onclick="loadAssessmentView(); closeMobileNav(); return false;" id="nav-assessment">
+        <i class="bi bi-card-checklist me-2"></i> Assessment
+      </a>
+    </div>
+    <div class="p-3 rounded m-2" id="sidebar-user" style="display:none; position:absolute; bottom:20px; width:calc(100% - 1rem);">
+      <small class="text-truncate d-block" style="color: rgba(255,255,255,0.8);" id="sidebarEmail"></small>
+      <span class="badge mt-2" id="sidebarRole"></span>
+    </div>
+  </nav>
+
+  <!-- Page Content -->
+  <main class="main-content flex-grow-1">
+    <div class="container-fluid p-4">
+
+      <!-- Loading View -->
+      <div id="loadingView" class="view">
+        <div class="d-flex justify-content-center align-items-center" style="height:80vh;">
+          <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+        </div>
       </div>
-      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-      <script>
-         // --- GLOBAL STATE ---
-         let currentUser = null;
-         let kpiMaster = [];
-         let studentsList = [];
-         
-         // --- INITIALIZATION ---
-         window.addEventListener('load', function() {
-           switchView('loadingView');
-           google.script.run
-             .withSuccessHandler(handleUserAuth)
-             .withFailureHandler(showError)
-             .getUserDetails();
-         });
-         
-         function handleUserAuth(user) {
-           if (!user || user.error) {
-             showError(user.error || 'Could not authenticate.');
-             return;
-           }
-           
-           currentUser = user;
-         
-           if (user.role === 'Unauthorized') {
-             switchView('unauthorizedView');
-           } else if (user.pinRequired) {
-             switchView('pinView');
-           } else {
-             initializeApp(user);
-           }
-         }
-         
-         function initializeApp(user) {
-           document.getElementById('userEmail').textContent = user.email;
-           document.getElementById('userRole').textContent = user.role;
-           setupUIBasedOnRole(user.role);
-           switchView('dashboardView');
-         }
-         
-         // --- UI & NAVIGATION ---
-         
-         function switchView(viewId) {
-           document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
-           const targetView = document.getElementById(viewId);
-           if (targetView) {
-               targetView.style.display = 'block';
-           } else {
-               console.error('View not found: ' + viewId);
-           }
-         }
-         
-         function setupUIBasedOnRole(role) {
-           if (role === 'Admin' || role === 'Supervisor') {
-             document.getElementById('nav-manage').style.display = 'block';
-           }
-           if (role === 'Volunteer') {
-             // Volunteer-specific UI changes if any
-           }
-         }
-         
-         function showError(error) {
-           console.error(error);
-           switchView('unauthorizedView');
-           document.querySelector('#unauthorizedView .alert').textContent = 'An error occurred: ' + (error.message || error);
-         }
-         
-         // --- PIN HANDLING ---
-         
-         function handlePinSubmit() {
-           const pin = document.getElementById('pinInput').value;
-           if (!pin) return;
-           
-           document.getElementById('pinError').style.display = 'none';
-           
-           google.script.run
-             .withSuccessHandler(response => {
-               if (response.success) {
-                 initializeApp(currentUser);
-               } else {
-                 document.getElementById('pinError').style.display = 'block';
-               }
-             })
-             .withFailureHandler(showError)
-             .verifyVolunteerPin(pin);
-         }
-         
-         // --- ASSESSMENT LOGIC ---
-         function loadAssessmentView() {
-           // Clear previous state
-           document.getElementById('student-grid-container').style.display = 'none';
-           document.getElementById('validation-error').style.display = 'none';
-           document.getElementById('schoolSelect').innerHTML = '';
-           document.getElementById('assessmentTypeSelect').value = '';
-         
-           switchView('loadingView');
-           if (currentUser.role === 'Volunteer') {
-              google.script.run
-               .withSuccessHandler(schools => {
-                 const select = document.getElementById('schoolSelect');
-                 select.innerHTML = '<option value="">--Select Your School--</option>';
-                 schools.forEach(s => {
-                   select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
-                 });
-                 switchView('assessmentView');
-               })
-               .withFailureHandler(showError)
-               .getMappedSchoolsForVolunteer(currentUser.email);
-           } else {
-              // TODO: Logic for Admin/Supervisor to see all schools in their region
-              // For now, just show the view as a placeholder
-              alert("Admin/Supervisor assessment view needs to be built. You can see the interface.");
-              switchView('assessmentView');
-           }
-         }
-         
-         async function loadStudentGrid() {
-           const schoolId = document.getElementById('schoolSelect').value;
-           const assessmentType = document.getElementById('assessmentTypeSelect').value;
-           const validationErrorDiv = document.getElementById('validation-error');
-           validationErrorDiv.style.display = 'none';
-           document.getElementById('student-grid-container').style.display = 'none';
-         
-           if (!schoolId || !assessmentType) {
-             validationErrorDiv.textContent = 'Please select a school and an assessment type.';
-             validationErrorDiv.style.display = 'block';
-             return;
-           }
-           
-           const loaderButton = event.target;
-           loaderButton.disabled = true;
-           loaderButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-         
-           // Fetch KPIs and Students in parallel
-           try {
-             const students = await new Promise((resolve, reject) => {
-               google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getStudentsForSchool(schoolId);
-             });
-             
-             if (students.length === 0) {
-                 validationErrorDiv.textContent = 'No students found for this school.';
-                 validationErrorDiv.style.display = 'block';
-                 return;
-             }
-         
-             studentsList = students;
-         
-             // Sequential validation check
-             if (assessmentType === 'Midline' || assessmentType === 'Endline') {
-                 const existingTypes = await new Promise((resolve, reject) => {
-                    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getExistingAssessmentTypes(students[0].studentId);
-                 });
-         
-                 if(assessmentType === 'Midline' && !existingTypes.includes('Baseline')) {
-                    validationErrorDiv.textContent = 'A "Baseline" assessment must be completed for students in this school before a "Midline" can be entered.';
-                    validationErrorDiv.style.display = 'block';
-                    return;
-                 }
-                 if(assessmentType === 'Endline' && !existingTypes.includes('Midline')) {
-                    validationErrorDiv.textContent = 'A "Midline" assessment must be completed before an "Endline" can be entered.';
-                    validationErrorDiv.style.display = 'block';
-                    return;
-                 }
-             }
-         
-             const kpis = await new Promise((resolve, reject) => {
-                 google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getKpis();
-             });
-             kpiMaster = kpis;
-         
-             renderAssessmentGrid(students, kpis);
-             document.getElementById('student-grid-container').style.display = 'block';
-         
-           } catch(err) {
-               showError(err);
-           } finally {
-               loaderButton.disabled = false;
-               loaderButton.textContent = 'Load Students';
-           }
-         }
-         
-         function renderAssessmentGrid(students, kpis) {
-           const head = document.getElementById('assessment-grid-head');
-           const body = document.getElementById('assessment-grid-body');
-           
-           let headerHtml = '<tr><th>Student Name</th>';
-           kpis.forEach(k => headerHtml += `<th>${k.name}</th>`);
-           headerHtml += '<th>Attendance</th></tr>';
-           head.innerHTML = headerHtml;
-         
-           let bodyHtml = '';
-           students.forEach(student => {
-             bodyHtml += `<tr data-studentid="${student.studentId}">
-               <td>${student.studentName} (${student.class})</td>`;
-             
-             kpis.forEach(kpi => {
-               bodyHtml += `<td><input type="number" class="form-control kpi-score" data-kpiid="${kpi.id}" min="1" max="5" style="width: 70px;"></td>`;
-             });
-             
-             bodyHtml += `<td>
-                 <div class="form-check form-switch">
-                   <input class="form-check-input attendance-toggle" type="checkbox" role="switch" checked onchange="toggleAttendance(this)">
-                   <label class="form-check-label">Present</label>
-                 </div>
-               </td>`;
-             bodyHtml += '</tr>';
-           });
-           body.innerHTML = bodyHtml;
-         }
-         
-         function toggleAttendance(checkbox) {
-           const row = checkbox.closest('tr');
-           const inputs = row.querySelectorAll('.kpi-score');
-           const label = row.querySelector('.form-check-label');
-           if (checkbox.checked) {
-             inputs.forEach(input => input.disabled = false);
-             label.textContent = "Present";
-           } else {
-             inputs.forEach(input => {
-               input.disabled = true;
-               input.value = '';
-             });
-             label.textContent = "Absent";
-           }
-         }
-         
-         function handleSaveAssessments() {
-           const schoolId = document.getElementById('schoolSelect').value;
-           const assessmentType = document.getElementById('assessmentTypeSelect').value;
-         
-           const payload = [];
-           const rows = document.querySelectorAll('#assessment-grid-body tr');
-           
-           rows.forEach(row => {
-             const studentId = row.dataset.studentid;
-             const isPresent = row.querySelector('.attendance-toggle').checked;
-             
-             const assessmentItem = {
-               studentId: studentId,
-               schoolId: schoolId,
-               assessmentType: assessmentType,
-               status: isPresent ? 'Present' : 'Absent',
-               scores: []
-             };
-         
-             if (isPresent) {
-               row.querySelectorAll('.kpi-score').forEach(input => {
-                  if(input.value) { 
-                     assessmentItem.scores.push({
-                       kpiId: input.dataset.kpiid,
-                       score: parseInt(input.value)
-                     });
-                  }
-               });
-             }
-             payload.push(assessmentItem);
-           });
-         
-           if(payload.length === 0) {
-             alert('No data to save.');
-             return;
-           }
-         
-           const saveBtn = event.target;
-           saveBtn.disabled = true;
-           saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
-         
-           google.script.run
-             .withSuccessHandler(response => {
-               alert(response.message);
-               if(response.success){
-                 loadAssessmentView(); // Reset the view cleanly
-               }
-             })
-             .withFailureHandler(err => {
-               alert('Save failed: ' + err.message);
-             })
-             .withFinally(() => {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> Save Assessments';
-             })
-             .saveAssessments(payload);
-         }
-         
-         // --- MANAGEMENT VIEW JAVASCRIPT ---
-         
-         // This function is triggered when a user clicks the "Manage" nav link
-         function loadManagementView() {
-         switchView('loadingView');
-         google.script.run
-           .withSuccessHandler(setupManagementUI)
-           .withFailureHandler(showError)
-           .getDataForManagementView();
-         }
-         
-         // This function runs after the data is fetched from the backend
-        function setupManagementUI(data) {
-            const { user, schools, volunteers } = data;
-            
-            // Populate dropdowns for the mapping form
-            const volSelect = document.getElementById('mapVolunteerSelect');
-            const schSelect = document.getElementById('mapSchoolSelect');
-            // ** THIS IS THE NEW ID for the manage students dropdown **
-            const manageSchoolSelect = document.getElementById('manageSchoolSelect');
-            
-            volSelect.innerHTML = '<option value="">-- Select Volunteer --</option>';
-            volunteers.forEach(v => { volSelect.innerHTML += `<option value="${v.email}">${v.name} (${v.email})</option>`; });
-            
-            schSelect.innerHTML = '<option value="">-- Select School --</option>';
-            manageSchoolSelect.innerHTML = '<option value="">-- Select School --</option>';
-            schools.forEach(s => { 
-                const optionHtml = `<option value="${s.id}">${s.name}</option>`;
-                schSelect.innerHTML += optionHtml;
-                manageSchoolSelect.innerHTML += optionHtml;
-            });
 
-            // If user is a Supervisor, pre-fill and disable Region/Chapter fields
-            if (user.role === 'Supervisor') {
-                ['schoolRegion', 'schoolChapter', 'volunteerRegion', 'volunteerChapter'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (id.includes('Region')) el.value = user.assignedRegion;
-                    if (id.includes('Chapter')) el.value = user.assignedChapter;
-                    el.readOnly = true;
-                    el.classList.add('bg-light'); // Visual cue
-                });
-            }
-            
-            document.getElementById('formAddSchool').reset();
-            document.getElementById('formAddVolunteer').reset();
-            document.getElementById('formMapVolunteer').reset();
-            
-            // ** Hide the student container when switching tabs **
-            document.getElementById('manage-students-container').style.display = 'none';
+      <!-- PIN View -->
+      <div id="pinView" class="view" style="display:none;">
+        <div class="row justify-content-center align-items-center" style="min-height: 100vh;">
+          <div class="col-md-6 col-lg-4">
+            <div class="card shadow-lg border-0" style="border-radius: 16px; overflow: hidden;">
+              <div class="card-body p-5">
+                <div class="text-center mb-5">
+                  <div style="width: 80px; height: 80px; background: linear-gradient(135deg, var(--yfs-primary) 0%, #1d4ed8 100%); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                    <i class="bi bi-shield-lock-fill fs-2" style="color: white;"></i>
+                  </div>
+                  <h4 class="mb-2" style="font-weight: 700; color: var(--text-primary);">Volunteer Login</h4>
+                  <p class="text-muted" style="font-size: 0.95rem;">Enter your 4-digit PIN to continue</p>
+                </div>
+                <input type="password" id="pinInput" class="form-control form-control-lg text-center mb-3" inputmode="numeric" pattern="[0-9]*" placeholder="â€¢â€¢â€¢â€¢" autocomplete="one-time-code" style="letter-spacing: 8px; font-size: 1.8rem; font-weight: 300;">
+                <div class="d-grid">
+                  <button class="btn btn-primary btn-lg" onclick="handlePinSubmit()" style="font-weight: 600; padding: 0.8rem;">
+                    <i class="bi bi-arrow-right-circle me-2"></i>Unlock
+                  </button>
+                </div>
+                <div id="pinError" class="alert alert-danger mt-3 text-center py-2" style="display:none; border-radius: 10px;">
+                  <i class="bi bi-exclamation-triangle me-1"></i>Invalid PIN. Please try again.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            // ** NEW: Setup the searchable dropdowns **
-            setupSearchableDropdowns();
-
-            switchView('manageView');
-        }
-
-        function loadManagedStudents(btn) {
-        const schoolId = document.getElementById('manageSchoolSelect').value;
-        if (!schoolId) {
-          alert("Please select a school.");
-          return;
-        }
+      <!-- Dashboard View -->
+      <div id="dashboardView" class="view" style="display:none;">
+        <div class="mb-5">
+          <div class="d-flex align-items-center justify-content-between mb-4">
+            <div>
+              <h1 class="mb-1" style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary);">Dashboard</h1>
+              <p class="text-muted mb-0" style="font-size: 1rem;">Welcome back, <strong id="userEmail"></strong></p>
+              <div class="mt-2">
+                <span class="badge bg-light text-dark border px-3 py-2" id="dashboardScopeLabel">Loading scope...</span>
+              </div>
+            </div>
+            <span id="userRole" class="badge fs-6 px-4 py-2" style="font-size: 0.95rem;"></span>
+          </div>
+        </div>
         
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+        <div class="row g-4 mb-5">
+          <div class="col-md-6 col-xl">
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Schools</p>
+                    <p class="stat-value mb-0" id="statSchools">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(37, 99, 235, 0.05) 100%); color: var(--yfs-primary);">
+                    <i class="bi bi-building"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl">
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Students</p>
+                    <p class="stat-value mb-0" id="statStudents">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%); color: var(--yfs-secondary);">
+                    <i class="bi bi-people"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl">
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Baseline</p>
+                    <p class="stat-value mb-0" id="statBaseline">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%); color: var(--yfs-accent);">
+                    <i class="bi bi-clipboard-check"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl">
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Midline</p>
+                    <p class="stat-value mb-0" id="statMidline">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(99, 102, 241, 0.05) 100%); color: #4f46e5;">
+                    <i class="bi bi-clipboard-data"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl">
+            <div class="card stat-card border-0 shadow-sm" style="transition: all 0.3s ease;">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <p class="text-muted mb-2" style="font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Endline</p>
+                    <p class="stat-value mb-0" id="statEndline">--</p>
+                  </div>
+                  <div class="stat-icon" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.05) 100%); color: var(--yfs-danger);">
+                    <i class="bi bi-clipboard2-check"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        google.script.run
-          .withSuccessHandler(students => {
-            // This runs on success
-            document.getElementById('manage-students-container').style.display = 'block';
-            renderManagedStudentGrid(students || []); 
-            
-            // "Finally" logic for success
+      <!-- Assessment View -->
+      <div id="assessmentView" class="view" style="display:none;">
+        <div class="mb-4">
+          <h1 style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary); margin-bottom: 0.5rem;">Student Assessment</h1>
+          <p class="text-muted mb-0">Enter and manage student assessment scores</p>
+        </div>
+        <div class="card shadow-sm border-0">
+          <div class="card-body p-4">
+            <div class="row g-3" id="assessment-setup">
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">School</label>
+                <select id="schoolSelect" class="form-select"></select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Class</label>
+                <select id="classSelect" class="form-select">
+                  <option value="">--Select Class--</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Assessment Type</label>
+                <select id="assessmentTypeSelect" class="form-select">
+                  <option value="">--Select Type--</option>
+                  <option value="Baseline">Baseline</option>
+                  <option value="Midline">Midline</option>
+                  <option value="Endline">Endline</option>
+                </select>
+              </div>
+              <div class="col-md-1 d-flex align-items-end">
+                <button class="btn btn-primary w-100" onclick="loadStudentGrid(this)">
+                  <i class="bi bi-arrow-repeat me-2"></i>Load
+                </button>
+              </div>
+            </div>
+            <div id="validation-error" class="alert alert-danger mt-3" style="display:none;"></div>
+            <div id="student-grid-container" class="mt-4" style="display: none;">
+              <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle">
+                  <thead class="table-light" id="assessment-grid-head"></thead>
+                  <tbody id="assessment-grid-body"></tbody>
+                </table>
+              </div>
+              <div class="d-flex justify-content-end mt-4">
+                <button class="btn btn-success px-5" onclick="handleSaveAssessments(this)">
+                  <i class="bi bi-check-circle-fill me-2"></i>Save Assessments
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manage View -->
+      <div id="manageView" class="view" style="display:none;">
+        <div class="mb-4">
+          <h1 style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary); margin-bottom: 0.5rem;">Management</h1>
+          <p class="text-muted mb-0">Manage schools, volunteers, mappings, and student data</p>
+        </div>
+        <div class="card shadow-sm border-0">
+          <div class="card-header bg-white border-bottom">
+            <ul class="nav nav-tabs card-header-tabs" id="manageTabs">
+              <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-add-school" id="tab-btn-school">
+                  <i class="bi bi-building-add me-1"></i>Add School
+                </button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students">
+                  <i class="bi bi-person-lines-fill me-1"></i>Manage Students
+                </button>
+              </li>
+              <li class="nav-item" id="nav-tab-volunteer" style="display:none;">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-add-volunteer">
+                  <i class="bi bi-person-plus me-1"></i>Add Volunteer
+                </button>
+              </li>
+              <li class="nav-item" id="nav-tab-map" style="display:none;">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-map-volunteer">
+                  <i class="bi bi-diagram-3 me-1"></i>Map Volunteer
+                </button>
+              </li>
+            </ul>
+          </div>
+          <div class="card-body">
+            <div class="tab-content">
+
+              <!-- â•â•â• ADD SCHOOL TAB â•â•â• -->
+              <div class="tab-pane fade show active" id="tab-add-school">
+                <div class="row g-4">
+                  <!-- Form column -->
+                  <div class="col-lg-5">
+                    <h5 class="mb-3">New School</h5>
+                    <div id="schoolFormAlert" class="alert alert-warning py-2 px-3 d-flex align-items-center gap-2" style="display:none !important;">
+                      <i class="bi bi-exclamation-triangle-fill"></i>
+                      <span id="schoolFormAlertMsg"></span>
+                    </div>
+                    <div class="row g-3" id="addSchoolFormFields">
+                      <div class="col-12">
+                        <label class="form-label">School Name <span class="text-danger">*</span></label>
+                        <input type="text" id="schoolName" class="form-control" placeholder="e.g. GHPS Channasandra">
+                      </div>
+                      <div class="col-md-6" id="schoolRegionWrapper">
+                        <label class="form-label">Region <span class="text-danger">*</span></label>
+                        <select id="schoolRegion" class="form-select">
+                          <option value="">--Select Region--</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6" id="schoolChapterWrapper">
+                        <label class="form-label">Chapter <span class="text-danger">*</span></label>
+                        <select id="schoolChapter" class="form-select" disabled>
+                          <option value="">--Select Region first--</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">Taluk</label>
+                        <input type="text" id="schoolTaluk" class="form-control">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">District</label>
+                        <input type="text" id="schoolDistrict" class="form-control">
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label">Total Strength <span class="text-danger">*</span></label>
+                        <input type="number" id="schoolStrength" class="form-control" placeholder="e.g. 120">
+                      </div>
+                    </div>
+                    <button class="btn btn-primary mt-4" onclick="handleAddSchool(this)">
+                      <i class="bi bi-plus-circle me-1"></i>Add School
+                    </button>
+                  </div>
+                  <!-- Table column -->
+                  <div class="col-lg-7">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h5 class="mb-0">Schools <span class="badge bg-secondary" id="schoolCountBadge">0</span></h5>
+                    </div>
+                    <input type="text" id="schoolTableSearch" class="form-control form-control-sm mb-2" placeholder="&#128269; Search schools...">
+                    <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
+                      <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light sticky-top">
+                          <tr><th>Name</th><th>Chapter</th><th>District</th><th class="text-center">Str.</th><th class="text-center">Del</th></tr>
+                        </thead>
+                        <tbody id="schoolsTableBody">
+                          <tr><td colspan="5" class="text-center text-muted p-3">No schools loaded yet.</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- â•â•â• MANAGE STUDENTS TAB â•â•â• -->
+              <div class="tab-pane fade" id="tab-manage-students">
+                <div class="row g-3 mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-semibold">Select School</label>
+                    <input type="text" id="manageSchSearch" class="form-control mb-2" placeholder="Search school...">
+                    <select id="manageSchoolSelect" class="form-select"></select>
+                  </div>
+                  <div class="col-md-6 d-flex align-items-end">
+                    <div id="studentCountInfo" style="display:none;">
+                      <span class="badge bg-primary fs-6 px-3 py-2">
+                        <i class="bi bi-people me-1"></i>
+                        <span id="studentCountLabel">0</span> students
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Loading indicator for student data -->
+                <div id="students-loading" style="display:none;" class="text-center py-4">
+                  <div class="spinner-border text-primary me-2" style="width:1.5rem;height:1.5rem;" role="status"></div>
+                  <span class="text-muted">Loading students...</span>
+                </div>
+
+                <div id="manage-students-container" style="display:none;">
+                  <div class="d-flex align-items-center mb-3 p-3 bg-light rounded gap-2">
+                    <label class="form-label mb-0 me-1">Add rows:</label>
+                    <input type="number" id="rowsToAddInput" class="form-control" style="width:90px;" placeholder="e.g. 5" min="1">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="addStudentRows()">
+                      <i class="bi bi-plus-lg me-1"></i>Add Rows
+                    </button>
+                    <button class="btn btn-success ms-auto" onclick="saveManagedStudents(this)">
+                      <i class="bi bi-floppy me-1"></i>Save Students
+                    </button>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-bordered align-middle">
+                      <thead class="table-light">
+                        <tr><th style="width:55%">Student Name</th><th>Class</th></tr>
+                      </thead>
+                      <tbody id="manageStudentTableBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- â•â•â• ADD VOLUNTEER TAB â•â•â• -->
+              <div class="tab-pane fade" id="tab-add-volunteer">
+                <div class="row g-4">
+                  <div class="col-lg-5">
+                    <h5 class="mb-3">New Volunteer</h5>
+                    <div class="row g-3">
+                      <div class="col-12">
+                        <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" id="volunteerName" class="form-control" placeholder="e.g. Ravi Kumar">
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" id="volunteerEmail" class="form-control" placeholder="ravi@example.com">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">PIN (4 digits) <span class="text-danger">*</span></label>
+                        <input type="text" id="volunteerPin" class="form-control" placeholder="â€¢â€¢â€¢â€¢" maxlength="4" pattern="\d{4}">
+                      </div>
+                      <div class="col-md-6" id="volRegionWrapper">
+                        <label class="form-label">Region <span class="text-danger">*</span></label>
+                        <select id="volunteerRegion" class="form-select">
+                          <option value="">--Select Region--</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6" id="volChapterWrapper">
+                        <label class="form-label">Chapter <span class="text-danger">*</span></label>
+                        <select id="volunteerChapter" class="form-select" disabled>
+                          <option value="">--Select Region first--</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button class="btn btn-primary mt-4" onclick="handleAddVolunteer(this)">
+                      <i class="bi bi-plus-circle me-1"></i>Add Volunteer
+                    </button>
+                  </div>
+                  <div class="col-lg-7">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h5 class="mb-0">Volunteers <span class="badge bg-secondary" id="volCountBadge">0</span></h5>
+                    </div>
+                    <div id="volFormAlert" class="alert alert-warning py-2 px-3 d-flex align-items-center gap-2 mb-2" style="display:none !important;">
+                      <i class="bi bi-exclamation-triangle-fill"></i>
+                      <span id="volFormAlertMsg"></span>
+                    </div>
+                    <input type="text" id="volTableSearch" class="form-control form-control-sm mb-2" placeholder="&#128269; Search volunteers...">
+                    <div class="table-responsive" style="max-height:380px; overflow-y:auto;">
+                      <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light sticky-top">
+                          <tr><th>Name</th><th>Email</th><th>Chapter</th><th class="text-center">Credentials</th><th class="text-center">Del</th></tr>
+                        </thead>
+                        <tbody id="volunteersTableBody">
+                          <tr><td colspan="5" class="text-center text-muted p-3">No volunteers loaded yet.</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- â•â•â• MAP VOLUNTEER TAB â•â•â• -->
+              <div class="tab-pane fade" id="tab-map-volunteer">
+                <div class="row g-4">
+                  <!-- Mapping form -->
+                  <div class="col-lg-5">
+                    <h5 class="mb-3">Create Mapping</h5>
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold">Volunteer</label>
+                      <input type="text" id="mapVolSearch" class="form-control mb-2" placeholder="Search volunteer...">
+                      <select id="mapVolunteerSelect" class="form-select" size="5"></select>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold">School</label>
+                      <input type="text" id="mapSchSearch" class="form-control mb-2" placeholder="Search school...">
+                      <select id="mapSchoolSelect" class="form-select" size="5"></select>
+                    </div>
+                    <button class="btn btn-primary w-100" onclick="handleMapVolunteer(this)">
+                      <i class="bi bi-link-45deg me-1"></i>Create Mapping
+                    </button>
+                  </div>
+                  <!-- Mappings table -->
+                  <div class="col-lg-7">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h5 class="mb-0">Current Mappings <span class="badge bg-secondary" id="mapCountBadge">0</span></h5>
+                    </div>
+                    <input type="text" id="mappingsTableSearch" class="form-control form-control-sm mb-2" placeholder="&#128269; Search mappings...">
+                    <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
+                      <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light sticky-top">
+                          <tr><th>Volunteer</th><th>School</th><th class="text-center">Action</th></tr>
+                        </thead>
+                        <tbody id="mappingsTableBody">
+                          <tr><td colspan="3" class="text-center text-muted p-3">No mappings yet.</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div><!-- /tab-content -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Unauthorized View -->
+      <div id="unauthorizedView" class="view" style="display:none;">
+        <div class="row justify-content-center align-items-center" style="min-height: 100vh;">
+          <div class="col-md-6">
+            <div class="card border-0 shadow-lg" style="border-radius: 16px;">
+              <div class="card-body p-5 text-center">
+                <div style="width: 80px; height: 80px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                  <i class="bi bi-shield-exclamation fs-2" style="color: var(--yfs-danger);"></i>
+                </div>
+                <h3 class="mb-3" style="font-weight: 700; color: var(--text-primary);">Access Denied</h3>
+                <p class="alert alert-danger d-flex align-items-center">
+                  <i class="bi bi-exclamation-triangle me-2"></i>
+                  <div>You are not authorized to access this application. Please contact your administrator.</div>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /container -->
+  </main>
+</div><!-- /app-wrapper -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  GLOBAL STATE
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+let currentUser = null;
+let sessionToken = '<?= sessionToken ?>' || sessionStorage.getItem('yfsSessionToken') || '';
+let bootstrappedUser = <?!= userJson ?> || JSON.parse(sessionStorage.getItem('yfsSessionUser') || 'null');
+let kpiMaster = [];
+let studentsList = [];
+let geoData = { regions: [], chapters: {} };
+let mgmtData = { schools: [], volunteers: [], mappings: [] };
+let assessmentSchools = [];
+let assessmentViewLoaded = false;
+let managementViewLoaded = false;
+let assessmentClassStudentsBySchool = {};
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  CONFIRMATION MODAL
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+let confirmModalCallback = null;
+
+const CACHE_VERSION = '1.0';
+
+function getCacheKey(type) {
+  const email = currentUser ? currentUser.email : '';
+  return `yfs.refData.${email}.${CACHE_VERSION}.${type}`;
+}
+
+function getCachedGeoData() {
+  if (!currentUser) return null;
+  const cached = localStorage.getItem(getCacheKey('geoData'));
+  return cached ? JSON.parse(cached) : null;
+}
+
+function setCachedGeoData(data) {
+  if (!currentUser) return;
+  localStorage.setItem(getCacheKey('geoData'), JSON.stringify(data));
+}
+
+function getCachedKpis() {
+  if (!currentUser) return null;
+  const cached = localStorage.getItem(getCacheKey('kpis'));
+  return cached ? JSON.parse(cached) : null;
+}
+
+function setCachedKpis(data) {
+  if (!currentUser) return;
+  localStorage.setItem(getCacheKey('kpis'), JSON.stringify(data));
+}
+
+function clearReferenceDataCache() {
+  if (!currentUser) return;
+  localStorage.removeItem(getCacheKey('geoData'));
+  localStorage.removeItem(getCacheKey('kpis'));
+}
+
+function showLoading(message = 'Loading...') {
+  const overlay = document.getElementById('loadingOverlay');
+  document.getElementById('loadingMessage').textContent = message;
+  overlay.style.display = 'flex';
+}
+
+function hideLoading() {
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.style.display = 'none';
+}
+
+function withLoading(promise, message = 'Loading...') {
+  showLoading(message);
+  return promise.finally(() => hideLoading());
+}
+
+function callServer(fnName, ...args) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(reject)[fnName](...args);
+  });
+}
+
+function hasManagementData() {
+  return managementViewLoaded && Array.isArray(mgmtData.schools);
+}
+
+function refreshManagementData() {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(data => {
+        if (data && data.success) {
+          const { schools, volunteers, mappings, geoData: geo } = data;
+          mgmtData = { schools, volunteers, mappings };
+          geoData = geo;
+          managementViewLoaded = true;
+          setCachedGeoData(geo);
+          resolve(data);
+        } else {
+          reject(new Error(data?.message || 'Failed to load management data'));
+        }
+      })
+      .withFailureHandler(reject)
+      .getDataForManagementView(sessionToken);
+  });
+}
+
+function showConfirmModal(title, message, onConfirm, options = {}) {
+  document.getElementById('confirmModalTitle').textContent = title;
+  document.getElementById('confirmModalMessage').textContent = message;
+  confirmModalCallback = onConfirm;
+  const yesBtn = document.getElementById('confirmModalYesBtn');
+  yesBtn.className = options.confirmClass || 'btn btn-danger';
+  yesBtn.innerHTML = `<i class="bi ${options.confirmIcon || 'bi-trash'} me-1"></i>${options.confirmLabel || 'Delete'}`;
+  document.getElementById('confirmModalOverlay').classList.add('active');
+}
+
+function closeConfirmModal() {
+  document.getElementById('confirmModalOverlay').classList.remove('active');
+  confirmModalCallback = null;
+}
+
+function handleConfirmModalYes() {
+  if (confirmModalCallback) {
+    confirmModalCallback();
+  }
+  closeConfirmModal();
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  TOAST NOTIFICATION SYSTEM (replaces all alert() calls)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function showToast(message, type = 'success', duration = 4000) {
+  const alertTypes = { 
+    success: 'alert-success', 
+    danger: 'alert-danger', 
+    warning: 'alert-warning', 
+    info: 'alert-info' 
+  };
+  const icons = { 
+    success: 'bi-check-circle-fill', 
+    danger: 'bi-x-circle-fill', 
+    warning: 'bi-exclamation-triangle-fill', 
+    info: 'bi-info-circle-fill' 
+  };
+  
+  const id = 'alert-' + Date.now();
+  const alertClass = alertTypes[type] || alertTypes.info;
+  const icon = icons[type] || icons.info;
+  
+  const html = `
+    <div id="${id}" class="alert ${alertClass} d-flex align-items-center gap-2 py-3 px-4 shadow-sm fade show" role="alert">
+      <i class="bi ${icon} fs-5"></i>
+      <span class="flex-grow-1">${message}</span>
+      <button type="button" class="btn-close" aria-label="Close"></button>
+    </div>`;
+  
+  const container = document.getElementById('toastContainer');
+  container.insertAdjacentHTML('beforeend', html);
+  
+  const alertEl = document.getElementById(id);
+  
+  // Internal helper to hide and remove
+  const removeAlert = () => {
+    if (alertEl && alertEl.parentNode) {
+      alertEl.classList.remove('show'); // Bootstrap's way
+      alertEl.style.opacity = '0';
+      setTimeout(() => alertEl.remove(), 300);
+    }
+  };
+
+  // Close button handler
+  alertEl.querySelector('.btn-close').addEventListener('click', removeAlert);
+  
+  // Auto-hide
+  if (duration > 0) {
+    setTimeout(removeAlert, duration);
+  }
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  LOGO UPLOAD
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function setupLogoUpload() {
+  const logoImg = document.getElementById('sidebarLogo');
+  const fileInput = document.getElementById('logoFileInput');
+  
+  // Click logo to upload
+  logoImg.addEventListener('click', () => fileInput.click());
+  
+  // Handle file selection
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const logoData = event.target.result;
+        // Save to localStorage
+        localStorage.setItem('appLogo', logoData);
+        // Update display
+        logoImg.src = logoData;
+        logoImg.title = 'Click to change logo';
+        showToast('Logo uploaded successfully!', 'success');
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+function loadStoredLogo() {
+  const storedLogo = localStorage.getItem('appLogo');
+  if (storedLogo) {
+    const logoImg = document.getElementById('sidebarLogo');
+    logoImg.src = storedLogo;
+    logoImg.title = 'Click to change logo';
+  }
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  INIT & AUTH
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+window.addEventListener('load', function() {
+  setupLogoUpload();
+  loadStoredLogo();
+  
+  // Close modal when clicking outside
+  document.getElementById('confirmModalOverlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('confirmModalOverlay')) {
+      closeConfirmModal();
+    }
+  });
+  
+  switchView('loadingView');
+  if (sessionToken && bootstrappedUser) {
+    sessionStorage.setItem('yfsSessionToken', sessionToken);
+    sessionStorage.setItem('yfsSessionUser', JSON.stringify(bootstrappedUser));
+    handleUserAuth(bootstrappedUser);
+  } else {
+    showError('Missing login session. Please log in again.');
+  }
+});
+
+function handleUserAuth(user) {
+  if (!user || user.error) { showError(user ? user.error : 'Authentication failed.'); return; }
+  currentUser = user;
+  if (user.role === 'Unauthorized') { switchView('unauthorizedView'); return; }
+  if (user.pinRequired) { switchView('pinView'); return; }
+  initializeApp(user);
+}
+
+function initializeApp(user) {
+  document.getElementById('userEmail').textContent = user.email;
+  document.getElementById('userRole').textContent = user.role;
+  document.getElementById('sidebarEmail').textContent = user.email;
+  document.getElementById('sidebarRole').textContent = user.role;
+  const roleBadge = document.getElementById('sidebarRole');
+  if (user.role === 'Admin') {
+    roleBadge.className = 'badge bg-danger';
+    roleBadge.style.background = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+  } else if (user.role === 'Supervisor') {
+    roleBadge.className = 'badge';
+    roleBadge.style.background = 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)';
+    roleBadge.style.color = 'white';
+  } else {
+    roleBadge.className = 'badge';
+    roleBadge.style.background = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+  }
+  const dashboardBadge = document.getElementById('userRole');
+  if (user.role === 'Admin') {
+    dashboardBadge.style.background = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+  } else if (user.role === 'Supervisor') {
+    dashboardBadge.style.background = 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)';
+    dashboardBadge.style.color = 'white';
+  } else {
+    dashboardBadge.style.background = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+  }
+  document.getElementById('sidebar-user').style.display = 'block';
+  setupUIBasedOnRole(user.role);
+  if (user.role === 'Volunteer') {
+    loadManagementView();
+  } else {
+    switchView('dashboardView');
+    loadDashboardStats();
+  }
+}
+
+function setupUIBasedOnRole(role) {
+  const canManage = role === 'Admin' || role === 'Supervisor' || role === 'Coordinator' || role === 'Volunteer';
+  if (canManage) document.getElementById('nav-manage').style.display = 'block';
+  document.getElementById('nav-dashboard').style.display = role === 'Volunteer' ? 'none' : 'block';
+}
+
+function switchView(viewId) {
+  document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+  const t = document.getElementById(viewId);
+  if (t) t.style.display = 'block';
+}
+
+function toggleMobileNav() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('mobileNavBackdrop');
+  const isOpen = sidebar.classList.toggle('active');
+  backdrop.classList.toggle('active', isOpen);
+}
+
+function closeMobileNav() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('mobileNavBackdrop');
+  if (sidebar) sidebar.classList.remove('active');
+  if (backdrop) backdrop.classList.remove('active');
+}
+
+function goHome() {
+  if (currentUser && currentUser.role === 'Volunteer') loadManagementView();
+  else switchView('dashboardView');
+  closeMobileNav();
+}
+
+function loadDashboardStats() {
+  if (!currentUser || currentUser.role === 'Volunteer') return;
+  ['statSchools', 'statStudents', 'statBaseline', 'statMidline', 'statEndline'].forEach(id => {
+    document.getElementById(id).textContent = '--';
+  });
+  document.getElementById('dashboardScopeLabel').textContent = 'Loading scope...';
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res || !res.success) {
+        showToast(res?.message || 'Unable to load dashboard statistics.', 'danger');
+        return;
+      }
+      renderDashboardStats(res);
+    })
+    .withFailureHandler(err => showToast(err.message || 'Unable to load dashboard statistics.', 'danger'))
+    .getDashboardStatsForUser(sessionToken);
+}
+
+function renderDashboardStats(data) {
+  const stats = data.stats || {};
+  document.getElementById('dashboardScopeLabel').textContent = data.scopeLabel || '';
+  document.getElementById('statSchools').textContent = stats.totalSchools || 0;
+  document.getElementById('statStudents').textContent = stats.totalStudents || 0;
+  document.getElementById('statBaseline').textContent = stats.baselineDone || 0;
+  document.getElementById('statMidline').textContent = stats.midlineDone || 0;
+  document.getElementById('statEndline').textContent = stats.endlineDone || 0;
+}
+
+function showError(error) {
+  const msg = (error && error.message) ? error.message : (error || 'An unknown error occurred.');
+  switchView('unauthorizedView');
+  document.querySelector('#unauthorizedView .alert div').textContent = 'An error occurred: ' + msg;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  PIN
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function handlePinSubmit() {
+  const pin = document.getElementById('pinInput').value;
+  if (!pin) return;
+  document.getElementById('pinError').style.display = 'none';
+  google.script.run
+    .withSuccessHandler(response => {
+      if (response.success) {
+        if (response.assignedRegion) { currentUser.assignedRegion = response.assignedRegion; currentUser.assignedChapter = response.assignedChapter; }
+        initializeApp(currentUser);
+      } else {
+        document.getElementById('pinError').style.display = 'block';
+      }
+    })
+    .withFailureHandler(err => showToast(err.message, 'danger'))
+    .verifyVolunteerPin(pin);
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  ASSESSMENT
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function loadAssessmentView(forceReset = false) {
+  if (assessmentViewLoaded && !forceReset) {
+    switchView('assessmentView');
+    return;
+  }
+
+  document.getElementById('student-grid-container').style.display = 'none';
+  document.getElementById('validation-error').style.display = 'none';
+  document.getElementById('schoolSelect').value = '';
+  document.getElementById('classSelect').innerHTML = '<option value="">--Select Class--</option>';
+  document.getElementById('assessmentTypeSelect').value = '';
+
+  if (assessmentViewLoaded) {
+    switchView('assessmentView');
+    return;
+  }
+
+  showLoading('Loading assessment data...');
+  const schoolsPromise = hasManagementData()
+    ? Promise.resolve(mgmtData.schools)
+    : callServer('getSchoolsForAssessment', sessionToken);
+
+  schoolsPromise
+    .then(schools => {
+      assessmentSchools = schools || [];
+      const sel = document.getElementById('schoolSelect');
+      sel.innerHTML = '<option value="">--Select School--</option>';
+      assessmentSchools.forEach(s => sel.innerHTML += `<option value="${escHtml(s.id)}">${escHtml(s.name)}</option>`);
+      sel.onchange = handleSchoolChange;
+      document.getElementById('classSelect').onchange = clearStudentGrid;
+      assessmentViewLoaded = true;
+      hideLoading();
+      switchView('assessmentView');
+    })
+    .catch(err => {
+      hideLoading();
+      showError(err);
+    });
+}
+
+function clearStudentGrid() {
+  document.getElementById('student-grid-container').style.display = 'none';
+  document.getElementById('assessment-grid-head').innerHTML = '';
+  document.getElementById('assessment-grid-body').innerHTML = '';
+  const errDiv = document.getElementById('validation-error');
+  errDiv.textContent = 'Please click Load to view students for the selected class';
+  errDiv.style.display = 'block';
+  studentsList = [];
+}
+
+function handleSchoolChange() {
+  clearStudentGrid();
+  setupClassDropdown();
+}
+
+async function setupClassDropdown() {
+  const schoolId = document.getElementById('schoolSelect').value;
+  const classSelect = document.getElementById('classSelect');
+
+  if (!schoolId) {
+    classSelect.innerHTML = '<option value="">--Select Class--</option>';
+    classSelect.disabled = true;
+    return;
+  }
+  
+  classSelect.disabled = true;
+  classSelect.innerHTML = '<option value="">Loading classes...</option>';
+
+  try {
+    const classes = await callServer('getClassesForSchool', sessionToken, schoolId);
+    
+    if(!classes.length) {
+      classSelect.innerHTML = '<option value="">No classes found</option>';
+      return; 
+    }
+
+    classSelect.innerHTML = '<option value="">--Select Class--</option>';
+    classes.forEach(c => classSelect.innerHTML += `<option value="${escHtml(c)}">${escHtml(c)}</option>`);
+  } catch (err) {
+    showToast('Error loading classes: ' + err.message, 'danger');
+    classSelect.innerHTML = '<option value="">Error fetching data</option>';
+  } finally {
+    if (classSelect.innerHTML.includes('No classes found')) {
+      classSelect.disabled = true;
+    } else {
+      classSelect.disabled = false;
+    }
+  }
+}
+
+async function loadStudentGrid(btn) {
+  const schoolId = document.getElementById('schoolSelect').value;
+  const classFilter = document.getElementById('classSelect').value;
+  const assessmentType = document.getElementById('assessmentTypeSelect').value;
+  const errDiv = document.getElementById('validation-error');
+  errDiv.style.display = 'none';
+  document.getElementById('student-grid-container').style.display = 'none';
+
+  if (!schoolId || !classFilter || !assessmentType) {
+    errDiv.textContent = 'Please select a school, class, and assessment type.';
+    errDiv.style.display = 'block';
+    return;
+  }
+
+  btn = btn || document.querySelector('button[onclick^="loadStudentGrid"]');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+  try {
+    const data = await callServer('getAssessmentGridData', sessionToken, schoolId, classFilter, assessmentType);
+    const students = data.students || [];
+    
+    if (!students.length) {
+      errDiv.innerHTML = `No students found in class "<strong>${escHtml(classFilter)}</strong>".`;
+      errDiv.style.display = 'block';
+      return;
+    }
+    studentsList = students;
+    assessmentClassStudentsBySchool[schoolId] = data.allStudentsForSchool || assessmentClassStudentsBySchool[schoolId] || students;
+    const kpis = data.kpis || [];
+    kpiMaster = kpis;
+    setCachedKpis(kpis);
+    
+    renderAssessmentGrid(students, kpis, data.existingDataMap || {});
+    document.getElementById('student-grid-container').style.display = 'block';
+
+  } catch(err) {
+    errDiv.textContent = err.message || 'Failed to load student data.';
+    errDiv.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Load'; 
+  }
+}
+
+function renderAssessmentGrid(students, kpis, existingDataMap = {}) {
+  const head = document.getElementById('assessment-grid-head');
+  const body = document.getElementById('assessment-grid-body');
+  head.innerHTML = `<tr><th>Student</th>${kpis.map(k => `<th class="text-center">${k.name}</th>`).join('')}<th class="text-center">Attendance</th></tr>`;
+
+  let bodyHtml = '';
+  students.forEach(student => {
+    const savedData = existingDataMap[student.studentId];
+    
+    // Determine the status. Default to "Present" (i.e., NOT absent) if no saved data exists.
+    const isAbsent = savedData ? savedData.status === 'Absent' : false;
+    
+    const scoresByKpi = {};
+    if (savedData && savedData.scores) {
+      savedData.scores.forEach(score => { scoresByKpi[score.kpiId] = score.score; });
+    }
+
+    bodyHtml += `<tr data-studentid="${student.studentId}">
+        <td>${student.studentName} <small class="text-muted">(Cls ${student.class})</small></td>`;
+
+    kpis.forEach(kpi => {
+        const value = scoresByKpi[kpi.id] || '';
+        // Disable score inputs if the student was marked absent
+        const disabled = isAbsent ? 'disabled' : '';
+        bodyHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${kpi.id}" min="1" max="5" value="${value}" style="width:65px;margin:auto;" ${disabled}></td>`;
+    });
+
+    // Conditionally set the toggle and label based on the 'isAbsent' status
+    const checked = !isAbsent ? 'checked' : '';
+    const labelClass = !isAbsent ? 'text-success' : 'text-danger';
+    const labelText = !isAbsent ? 'Present' : 'Absent';
+
+    bodyHtml += `<td class="text-center">
+        <div class="form-check form-switch d-flex justify-content-center">
+            <input class="form-check-input attendance-toggle" type="checkbox" role="switch" ${checked} onchange="toggleAttendance(this)" style="width:2.5em;height:1.3em;">
+        </div>
+        <small class="attendance-label ${labelClass} fw-semibold">${labelText}</small>
+    </td></tr>`;
+  });
+  body.innerHTML = bodyHtml;
+}
+
+function toggleAttendance(checkbox) {
+  const row = checkbox.closest('tr');
+  row.querySelectorAll('.kpi-score').forEach(inp => { inp.disabled = !checkbox.checked; if (!checkbox.checked) inp.value = ''; });
+  row.querySelector('.attendance-label').textContent = checkbox.checked ? 'Present' : 'Absent';
+  row.querySelector('.attendance-label').className = 'attendance-label fw-semibold ' + (checkbox.checked ? 'text-success' : 'text-danger');
+}
+
+function handleSaveAssessments(btn) {
+  const schoolId = document.getElementById('schoolSelect').value;
+  const assessmentType = document.getElementById('assessmentTypeSelect').value;
+  const payload = [];
+
+  document.querySelectorAll('#assessment-grid-body tr').forEach(row => {
+    const isPresent = row.querySelector('.attendance-toggle').checked;
+    const item = { studentId: row.dataset.studentid, schoolId, assessmentType, status: isPresent ? 'Present' : 'Absent', scores: [] };
+    if (isPresent) {
+      row.querySelectorAll('.kpi-score').forEach(inp => {
+        if (inp.value) item.scores.push({ kpiId: inp.dataset.kpiid, score: parseInt(inp.value) });
+      });
+    }
+    payload.push(item);
+  });
+
+  if (!payload.length) { showToast('No data to save.', 'warning'); return; }
+
+  btn = btn || document.querySelector('button[onclick^="handleSaveAssessments"]');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+  showLoading('Saving assessment data...');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      showToast(res.message, res.success ? 'success' : 'danger');
+      if (res.success) loadAssessmentView(true);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Save Assessments';
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Save Assessments';
+    })
+    .saveAssessments(sessionToken, payload);
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  MANAGEMENT
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+function loadManagementView() {
+  if (managementViewLoaded) {
+    switchView('manageView');
+    return;
+  }
+
+  showLoading('Loading management data...');
+  google.script.run
+    .withSuccessHandler(data => {
+      hideLoading();
+      if (data && data.success === false) {
+        showError(data.message || 'Failed to load management data.');
+        return;
+      }
+      setupManagementUI(data);
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showError(err);
+    })
+    .getDataForManagementView(sessionToken);
+}
+
+function setupManagementUI(data) {
+  const { user, schools, volunteers, mappings, geoData: geo } = data;
+  mgmtData = { schools, volunteers, mappings };
+  geoData = geo;
+  managementViewLoaded = true;
+  setCachedGeoData(geo);
+
+  // Show/hide tabs based on role
+  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor' || user.role === 'Coordinator';
+  document.getElementById('nav-tab-volunteer').style.display = canManageVols ? '' : 'none';
+  document.getElementById('nav-tab-map').style.display = canManageVols ? '' : 'none';
+
+  // Setup geo dropdowns
+  setupGeoDropdowns(geo, user);
+
+  // Setup searchable selects for mapping
+  setupLiveSearch('mapVolSearch', 'mapVolunteerSelect');
+  setupLiveSearch('mapSchSearch', 'mapSchoolSelect');
+  setupLiveSearch('manageSchSearch', 'manageSchoolSelect');
+
+  // Populate mapping selects - filter out mapped volunteers only.
+  // A school can have multiple volunteers across the year.
+  const mappedVolunteerEmails = new Set(mappings.map(m => m.volunteerEmail));
+  
+  const volSel = document.getElementById('mapVolunteerSelect');
+  volSel.innerHTML = '';
+  volunteers.filter(v => !mappedVolunteerEmails.has(v.email)).forEach(v => 
+    volSel.innerHTML += `<option value="${v.email}">${v.name} (${v.email})</option>`
+  );
+
+  const schSel = document.getElementById('mapSchoolSelect');
+  schSel.innerHTML = '';
+  const manageSel = document.getElementById('manageSchoolSelect');
+  manageSel.innerHTML = '<option value="">-- Select School --</option>';
+  schools.forEach(s => {
+    schSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+    manageSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+  });
+
+  // Render all tables
+  renderSchoolsTable(schools);
+  renderVolunteersTable(volunteers);
+  renderMappingsTable(mappings);
+
+  // Auto-load students when school selected
+  document.getElementById('manageSchoolSelect').onchange = function() {
+    if (this.value) loadManagedStudents();
+    else { document.getElementById('manage-students-container').style.display = 'none'; }
+  };
+
+  // Reset student container
+  document.getElementById('manage-students-container').style.display = 'none';
+
+  switchView('manageView');
+}
+
+function setupGeoDropdowns(geo, user) {
+  const isAdmin = user.role === 'Admin';
+  const isSupervisor = user.role === 'Supervisor';
+
+  // School dropdowns
+  const schRegion = document.getElementById('schoolRegion');
+  const schChapter = document.getElementById('schoolChapter');
+  // Volunteer dropdowns
+  const volRegion = document.getElementById('volunteerRegion');
+  const volChapter = document.getElementById('volunteerChapter');
+
+  function populateRegion(sel, chapSel) {
+    sel.innerHTML = '<option value="">--Select Region--</option>';
+    geo.regions.forEach(r => sel.innerHTML += `<option value="${escHtml(r)}">${escHtml(r)}</option>`);
+    sel.onchange = function() {
+      populateChapters(chapSel, this.value, '');
+    };
+  }
+
+  function populateChapters(chapSel, region, selectedChapter) {
+    chapSel.innerHTML = '<option value="">--Select Chapter--</option>';
+    (geo.chapters[region] || []).forEach(c => {
+      const selected = c === selectedChapter ? 'selected' : '';
+      chapSel.innerHTML += `<option value="${escHtml(c)}" ${selected}>${escHtml(c)}</option>`;
+    });
+    chapSel.disabled = !region;
+  }
+
+  function lockRegionAllowChapter(regionSel, chapterSel) {
+    regionSel.innerHTML = `<option value="${escHtml(user.assignedRegion)}">${escHtml(user.assignedRegion)}</option>`;
+    regionSel.disabled = true;
+    populateChapters(chapterSel, user.assignedRegion, user.assignedChapter);
+    chapterSel.disabled = false;
+  }
+
+  function lockRegionAndChapter(regionSel, chapterSel) {
+    regionSel.innerHTML = `<option value="${escHtml(user.assignedRegion)}">${escHtml(user.assignedRegion)}</option>`;
+    regionSel.disabled = true;
+    chapterSel.innerHTML = `<option value="${escHtml(user.assignedChapter)}">${escHtml(user.assignedChapter)}</option>`;
+    chapterSel.disabled = true;
+  }
+
+  if (isAdmin) {
+    populateRegion(schRegion, schChapter);
+    populateRegion(volRegion, volChapter);
+    schChapter.disabled = true;
+    volChapter.disabled = true;
+  } else if (isSupervisor) {
+    lockRegionAllowChapter(schRegion, schChapter);
+    lockRegionAllowChapter(volRegion, volChapter);
+  } else {
+    lockRegionAndChapter(schRegion, schChapter);
+    lockRegionAndChapter(volRegion, volChapter);
+  }
+}
+
+// Schools Table
+function renderSchoolsTable(schools) {
+  const body = document.getElementById('schoolsTableBody');
+  document.getElementById('schoolCountBadge').textContent = schools.length;
+  if (!schools.length) {
+    body.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-3">No schools yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = schools.map(s => `
+    <tr id="school-row-${escHtml(s.id)}">
+      <td><div class="fw-semibold">${escHtml(s.name)}</div><small class="text-muted">${escHtml(s.region||'')}</small></td>
+      <td>${escHtml(s.chapter||'')}</td>
+      <td>${escHtml(s.district||'')}</td>
+      <td class="text-center">${s.strength||''}</td>
+      <td class="text-center">
+        <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteSchool('${escHtml(s.id)}', this)" title="Delete school">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+
+  // Wire up search filter
+  const searchEl = document.getElementById('schoolTableSearch');
+  if (searchEl) {
+    searchEl.oninput = function() {
+      const term = this.value.toLowerCase();
+      document.querySelectorAll('#schoolsTableBody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      });
+    };
+  }
+}
+
+function showSchoolFormAlert(msg) {
+  const el = document.getElementById('schoolFormAlert');
+  document.getElementById('schoolFormAlertMsg').textContent = msg;
+  el.style.display = 'flex';
+  el.style.setProperty('display', 'flex', 'important');
+  setTimeout(() => { el.style.setProperty('display', 'none', 'important'); }, 5000);
+}
+
+function handleAddSchool(btn) {
+  const name = document.getElementById('schoolName').value.trim();
+  const region = document.getElementById('schoolRegion').value;
+  const chapter = document.getElementById('schoolChapter').value;
+  const strength = document.getElementById('schoolStrength').value;
+
+  if (!name || !region || !chapter || !strength) {
+    showSchoolFormAlert('Please fill in all required fields (Name, Region, Chapter, Strength).');
+    return;
+  }
+
+  // Duplicate check (case-insensitive, same chapter)
+  const duplicate = mgmtData.schools.find(s =>
+    s.name.toLowerCase() === name.toLowerCase() && s.chapter === chapter
+  );
+  if (duplicate) {
+    showSchoolFormAlert(`"${name}" already exists in ${chapter}. Please check before adding again.`);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
+
+  const schoolData = {
+    name, region, chapter,
+    taluk: document.getElementById('schoolTaluk').value.trim(),
+    district: document.getElementById('schoolDistrict').value.trim(),
+    strength: parseInt(strength)
+  };
+
+  showLoading('Adding school...');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res.success) {
+        showToast(res.message, 'success');
+        mgmtData.schools.push(res.school);
+        assessmentViewLoaded = false;
+        renderSchoolsTable(mgmtData.schools);
+        refreshSchoolSelects();
+        ['schoolName','schoolTaluk','schoolDistrict','schoolStrength'].forEach(id => document.getElementById(id).value = '');
+        if (!document.getElementById('schoolRegion').disabled) {
+          document.getElementById('schoolRegion').value = '';
+          document.getElementById('schoolChapter').innerHTML = '<option value="">--Select Region first--</option>';
+          document.getElementById('schoolChapter').disabled = true;
+        }
+      } else {
+        showToast(res.message, 'danger');
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add School';
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add School';
+    })
+    .addSchool(sessionToken, schoolData);
+}
+
+function handleDeleteSchool(schoolId, btn) {
+  // Find school name for the modal
+  const school = mgmtData.schools.find(s => s.id === schoolId);
+  if (!school) return;
+  
+  // Check for child records before showing confirmation
+  showLoading('Validating deletion...');
+  google.script.run
+    .withSuccessHandler(validation => {
+      hideLoading();
+      if (!validation.canDelete) {
+        showToast(validation.reason, 'warning');
+        return;
+      }
+      
+      // If validation passes, show confirmation modal
+      showConfirmModal(
+        'Delete School',
+        `Are you sure you want to delete "${school.name}"? This action cannot be undone.`,
+        () => {
+          btn.disabled = true;
+          showLoading('Deleting school...');
+          google.script.run
+            .withSuccessHandler(res => {
+              hideLoading();
+              if (res.success) {
+                mgmtData.schools = mgmtData.schools.filter(s => s.id !== schoolId);
+                assessmentViewLoaded = false;
+                delete assessmentClassStudentsBySchool[schoolId];
+                renderSchoolsTable(mgmtData.schools);
+                refreshSchoolSelects();
+                showToast('School deleted successfully.', 'success');
+              } else {
+                showToast(res.message || 'Could not delete.', 'danger');
+                btn.disabled = false;
+              }
+            })
+            .withFailureHandler(err => { 
+              hideLoading();
+              showToast(err.message, 'danger'); 
+              btn.disabled = false; 
+            })
+            .deleteSchool(sessionToken, schoolId);
+        }
+      );
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast('Validation error: ' + err.message, 'danger');
+    })
+    .canDeleteSchool(sessionToken, schoolId);
+}
+
+function refreshSchoolSelects() {
+  const schools = mgmtData.schools;
+  const schSel = document.getElementById('mapSchoolSelect');
+  const manageSel = document.getElementById('manageSchoolSelect');
+  schSel.innerHTML = '';
+  manageSel.innerHTML = '<option value="">-- Select School --</option>';
+  schools.forEach(s => {
+    schSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+    manageSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+  });
+}
+
+// â”€â”€â”€ Volunteers Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function renderVolunteersTable(volunteers) {
+  const body = document.getElementById('volunteersTableBody');
+  document.getElementById('volCountBadge').textContent = volunteers.length;
+  if (!volunteers.length) {
+    body.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-3">No volunteers yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = volunteers.map(v => `
+    <tr>
+      <td><div class="fw-semibold">${escHtml(v.name)}</div></td>
+      <td><small class="text-muted">${escHtml(v.email)}</small></td>
+      <td>${escHtml(v.chapter||'')}</td>
+      <td class="text-center">
+        <button class="btn btn-outline-primary btn-sm" onclick="handleSendVolunteerCredentials('${escJsString(v.email)}', this)" title="${v.credentialsEmailSentAt ? 'Resend login credentials' : 'Send login credentials'}">
+          <i class="bi bi-envelope${v.credentialsEmailSentAt ? '-check' : ''} me-1"></i>${v.credentialsEmailSentAt ? 'Resend email' : 'Send email'}
+        </button>
+        ${v.credentialsEmailSentAt ? `<div><small class="text-muted">Sent ${escHtml(formatCredentialEmailDate(v.credentialsEmailSentAt))}</small></div>` : ''}
+      </td>
+      <td class="text-center">
+        <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteVolunteer('${escJsString(v.email)}', this)" title="Delete volunteer">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+
+  const searchEl = document.getElementById('volTableSearch');
+  if (searchEl) {
+    searchEl.oninput = function() {
+      const term = this.value.toLowerCase();
+      document.querySelectorAll('#volunteersTableBody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      });
+    };
+  }
+}
+
+function formatCredentialEmailDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function handleSendVolunteerCredentials(volunteerEmail, btn) {
+  const volunteer = mgmtData.volunteers.find(v => v.email === volunteerEmail);
+  if (!volunteer) return;
+
+  const actionLabel = volunteer.credentialsEmailSentAt ? 'Resend email' : 'Send email';
+  showConfirmModal(
+    actionLabel,
+    `Send login credentials and the app link to ${volunteer.name} at ${volunteer.email}?`,
+    () => {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res.success) {
+            const idx = mgmtData.volunteers.findIndex(v => v.email === volunteerEmail);
+            if (idx !== -1) mgmtData.volunteers[idx] = res.volunteer;
+            renderVolunteersTable(mgmtData.volunteers);
+            showToast(res.message, 'success');
+          } else {
+            showToast(res.message || 'Could not send email.', 'danger');
             btn.disabled = false;
-            btn.innerHTML = 'Load Students';
-          })
-          .withFailureHandler(err => {
-              // This runs on failure
-              alert('Error loading students: ' + err.message);
-              document.getElementById('manage-students-container').style.display = 'none';
+            btn.innerHTML = `<i class="bi bi-envelope${volunteer.credentialsEmailSentAt ? '-check' : ''} me-1"></i>${volunteer.credentialsEmailSentAt ? 'Resend email' : 'Send email'}`;
+          }
+        })
+        .withFailureHandler(err => {
+          showToast(err.message, 'danger');
+          btn.disabled = false;
+          btn.innerHTML = `<i class="bi bi-envelope${volunteer.credentialsEmailSentAt ? '-check' : ''} me-1"></i>${volunteer.credentialsEmailSentAt ? 'Resend email' : 'Send email'}`;
+        })
+        .sendVolunteerCredentialsEmail(sessionToken, volunteerEmail);
+    },
+    { confirmLabel: actionLabel, confirmClass: 'btn btn-primary', confirmIcon: 'bi-envelope-fill' }
+  );
+}
 
-              // "Finally" logic for failure
+function handleAddVolunteer(btn) {
+  const name = document.getElementById('volunteerName').value.trim();
+  const email = document.getElementById('volunteerEmail').value.trim();
+  const pin = document.getElementById('volunteerPin').value.trim();
+  const region = document.getElementById('volunteerRegion').value;
+  const chapter = document.getElementById('volunteerChapter').value;
+
+  if (!name || !email || !pin || !region || !chapter) {
+    const el = document.getElementById('volFormAlert');
+    document.getElementById('volFormAlertMsg').textContent = 'Please fill in all required fields.';
+    el.style.setProperty('display', 'flex', 'important');
+    setTimeout(() => el.style.setProperty('display', 'none', 'important'), 5000);
+    return;
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    showToast('PIN must be exactly 4 digits.', 'warning');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
+
+  showLoading('Adding volunteer...');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res.success) {
+        showToast(res.message, 'success');
+        mgmtData.volunteers.push(res.volunteer);
+        renderVolunteersTable(mgmtData.volunteers);
+        const volSel = document.getElementById('mapVolunteerSelect');
+        volSel.innerHTML += `<option value="${res.volunteer.email}">${res.volunteer.name} (${res.volunteer.email})</option>`;
+        ['volunteerName','volunteerEmail','volunteerPin'].forEach(id => document.getElementById(id).value = '');
+        if (!document.getElementById('volunteerRegion').disabled) {
+          document.getElementById('volunteerRegion').value = '';
+          document.getElementById('volunteerChapter').innerHTML = '<option value="">--Select Region first--</option>';
+          document.getElementById('volunteerChapter').disabled = true;
+        }
+      } else {
+        showToast(res.message, 'danger');
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add Volunteer';
+    })
+    .addVolunteer(sessionToken, { name, email, pin, region, chapter });
+}
+
+function handleDeleteVolunteer(volunteerEmail, btn) {
+  // Find volunteer name for the modal
+  const volunteer = mgmtData.volunteers.find(v => v.email === volunteerEmail);
+  if (!volunteer) return;
+  
+  // Check for child records before showing confirmation
+  showLoading('Validating deletion...');
+  google.script.run
+    .withSuccessHandler(validation => {
+      hideLoading();
+      if (!validation.canDelete) {
+        showToast(validation.reason, 'warning');
+        return;
+      }
+      
+      // If validation passes, show confirmation modal
+      showConfirmModal(
+        'Delete Volunteer',
+        `Are you sure you want to delete "${volunteer.name} (${volunteer.email})"? This action cannot be undone.`,
+        () => {
+          btn.disabled = true;
+          showLoading('Deleting volunteer...');
+          google.script.run
+            .withSuccessHandler(res => {
+              hideLoading();
+              if (res.success) {
+                mgmtData.volunteers = mgmtData.volunteers.filter(v => v.email !== volunteerEmail);
+                renderVolunteersTable(mgmtData.volunteers);
+                // Remove deleted volunteer from mapping select if it is present.
+                const volSel = document.getElementById('mapVolunteerSelect');
+                if (volSel) {
+                  Array.from(volSel.options).forEach((opt, idx) => {
+                    if (opt.value === volunteerEmail) volSel.remove(idx);
+                  });
+                }
+                showToast('Volunteer deleted successfully.', 'success');
+              } else {
+                showToast(res.message || 'Could not delete volunteer.', 'danger');
+                btn.disabled = false;
+              }
+            })
+            .withFailureHandler(err => { 
+              hideLoading();
+              showToast(err.message, 'danger'); 
+              btn.disabled = false; 
+            })
+            .deleteVolunteer(sessionToken, volunteerEmail);
+        }
+      );
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast('Validation error: ' + err.message, 'danger');
+    })
+    .canDeleteVolunteer(sessionToken, volunteerEmail);
+}
+
+// â”€â”€â”€ Mappings Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function renderMappingsTable(mappings) {
+  const body = document.getElementById('mappingsTableBody');
+  document.getElementById('mapCountBadge').textContent = mappings.length;
+  if (!mappings.length) {
+    body.innerHTML = '<tr><td colspan="3" class="text-center text-muted p-3">No mappings yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = mappings.map(m => `
+    <tr id="map-row-${m.mappingId}">
+      <td>
+        <div class="fw-semibold">${escHtml(m.volunteerName)}</div>
+        <small class="text-muted">${escHtml(m.volunteerEmail)}</small>
+      </td>
+      <td>${escHtml(m.schoolName)}</td>
+      <td class="text-center">
+        <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteMapping('${m.mappingId}', this)" title="Remove mapping">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+
+  const searchEl = document.getElementById('mappingsTableSearch');
+  if (searchEl) {
+    searchEl.oninput = function() {
+      const term = this.value.toLowerCase();
+      document.querySelectorAll('#mappingsTableBody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      });
+    };
+  }
+}
+
+function handleMapVolunteer(btn) {
+  const volunteerEmail = document.getElementById('mapVolunteerSelect').value;
+  const schoolId = document.getElementById('mapSchoolSelect').value;
+  if (!volunteerEmail || !schoolId) { showToast('Please select both a volunteer and a school.', 'warning'); return; }
+
+  // Check one-to-one mapping: volunteer already mapped to another school
+  const volunteerAlreadyMapped = mgmtData.mappings.find(m => m.volunteerEmail === volunteerEmail);
+  if (volunteerAlreadyMapped) {
+    showToast(`${volunteerAlreadyMapped.volunteerName} is already mapped to ${volunteerAlreadyMapped.schoolName}. Remove that mapping first.`, 'warning');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Mapping...';
+
+  showLoading('Creating mapping...');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res.success) {
+        showToast(res.message, 'success');
+        mgmtData.mappings.push(res.mapping);
+        assessmentViewLoaded = false;
+        renderMappingsTable(mgmtData.mappings);
+        
+        // Remove the mapped volunteer only. Schools can be mapped to multiple volunteers.
+        const volSel = document.getElementById('mapVolunteerSelect');
+        
+        // Remove mapped volunteer option
+        Array.from(volSel.options).forEach((opt, idx) => {
+          if (opt.value === volunteerEmail) volSel.remove(idx);
+        });
+        
+        // Reset search inputs
+        document.getElementById('mapVolSearch').value = '';
+        document.getElementById('mapSchSearch').value = '';
+      } else {
+        showToast(res.message, 'warning');
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Create Mapping';
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-link-45deg me-1"></i>Create Mapping';
+    })
+    .mapVolunteerToSchool(sessionToken, { volunteerEmail, schoolId });
+}
+
+function handleDeleteMapping(mappingId, btn) {
+  // Find mapping details for the modal
+  const mapping = mgmtData.mappings.find(m => m.mappingId === mappingId);
+  if (!mapping) return;
+  
+  showConfirmModal(
+    'Remove Mapping',
+    `Are you sure you want to remove "${mapping.volunteerName}" from "${mapping.schoolName}"?`,
+    () => {
+      btn.disabled = true;
+      showLoading('Removing mapping...');
+      google.script.run
+        .withSuccessHandler(res => {
+          hideLoading();
+          if (res.success) {
+            document.getElementById('map-row-' + mappingId).remove();
+            mgmtData.mappings = mgmtData.mappings.filter(m => m.mappingId !== mappingId);
+            assessmentViewLoaded = false;
+            document.getElementById('mapCountBadge').textContent = mgmtData.mappings.length;
+            
+            // Re-add the volunteer to the mapping select. The school remained available.
+            const volSel = document.getElementById('mapVolunteerSelect');
+            
+            // Find the volunteer in the list and add back
+            const volunteer = mgmtData.volunteers.find(v => v.email === mapping.volunteerEmail);
+            if (volunteer) {
+              const optVol = document.createElement('option');
+              optVol.value = volunteer.email;
+              optVol.textContent = `${volunteer.name} (${volunteer.email})`;
+              volSel.appendChild(optVol);
+            }
+            showToast('Mapping removed. Volunteer is available for remapping.', 'success');
+          } else {
+            showToast(res.message, 'danger');
+            btn.disabled = false;
+          }
+        })
+        .withFailureHandler(err => { 
+          hideLoading();
+          showToast(err.message, 'danger'); 
+          btn.disabled = false; 
+        })
+        .deleteMapping(sessionToken, mappingId);
+    }
+  );
+}
+
+// â”€â”€â”€ Students â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function loadManagedStudents() {
+  const schoolId = document.getElementById('manageSchoolSelect').value;
+  if (!schoolId) return;
+
+  // Show loading, hide content
+  document.getElementById('manage-students-container').style.display = 'none';
+  document.getElementById('students-loading').style.display = 'block';
+  document.getElementById('studentCountInfo').style.display = 'none';
+
+  google.script.run
+    .withSuccessHandler(students => {
+      document.getElementById('students-loading').style.display = 'none';
+      document.getElementById('manage-students-container').style.display = 'block';
+      const count = (students || []).length;
+      document.getElementById('studentCountLabel').textContent = count;
+      document.getElementById('studentCountInfo').style.display = 'block';
+      renderManagedStudentGrid(students || []);
+    })
+    .withFailureHandler(err => {
+      document.getElementById('students-loading').style.display = 'none';
+      showToast('Error loading students: ' + err.message, 'danger');
+    })
+    .getStudentsBySchool(sessionToken, schoolId);
+}
+
+function renderManagedStudentGrid(students) {
+  const body = document.getElementById('manageStudentTableBody');
+  if (!students.length) {
+    body.innerHTML = `<tr id="no-managed-students-row"><td colspan="3" class="text-center text-muted p-3">No students found. Use "Add Rows" to begin.</td></tr>`;
+    return;
+  }
+  body.innerHTML = students.map(s => `<tr data-id="${escHtml(s.studentId)}">
+      <td><input class="form-control form-control-sm student-name" value="${escHtml(s.studentName)}" placeholder="Student name"></td>
+      <td><input class="form-control form-control-sm student-class" value="${escHtml(s.class || '')}" placeholder="e.g. 7"></td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-outline-danger" onclick="handleDeleteStudent('${escHtml(s.studentId)}', this)" title="Delete student">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+function addStudentRows() {
+  const countInput = document.getElementById('rowsToAddInput');
+  const count = parseInt(countInput.value, 10);
+  if (!count || count <= 0) { showToast('Please enter a valid number of rows.', 'warning'); return; }
+  const body = document.getElementById('manageStudentTableBody');
+  const placeholder = document.getElementById('no-managed-students-row');
+  if (placeholder) placeholder.remove();
+  let rowsHtml = '';
+  for (let i = 0; i < count; i++) {
+    rowsHtml += `<tr data-id=""><td><input class="form-control form-control-sm student-name" placeholder="Student name"></td><td><input class="form-control form-control-sm student-class" placeholder="e.g. 7"></td><td class="text-center"></td></tr>`;
+  }
+  body.insertAdjacentHTML('beforeend', rowsHtml);
+  countInput.value = '';
+}
+
+function handleDeleteStudent(studentId, btn) {
+  if (!studentId) {
+    // New row - just remove from table
+    btn.closest('tr').remove();
+    return;
+  }
+  
+  const row = btn.closest('tr');
+  const studentName = row.querySelector('.student-name').value;
+  
+  // Check for child records before showing confirmation
+  google.script.run
+    .withSuccessHandler(validation => {
+      if (!validation.canDelete) {
+        showToast(validation.reason, 'warning');
+        return;
+      }
+      
+      // If validation passes, show confirmation modal
+      showConfirmModal(
+        'Delete Student',
+        `Are you sure you want to delete "${escHtml(studentName)}"? This action cannot be undone.`,
+        () => {
+          btn.disabled = true;
+          showLoading('Deleting student...');
+          google.script.run
+            .withSuccessHandler(res => {
+              hideLoading();
+              if (res.success) {
+                row.remove();
+                showToast('Student deleted successfully.', 'success');
+              } else {
+                showToast(res.message || 'Could not delete student.', 'danger');
+                btn.disabled = false;
+              }
+            })
+            .withFailureHandler(err => {
+              hideLoading();
+              showToast(err.message, 'danger');
               btn.disabled = false;
-              btn.innerHTML = 'Load Students';
-          })
-          .getStudentsBySchool(schoolId);
+            })
+            .deleteStudent(sessionToken, studentId);
         }
+      );
+    })
+    .withFailureHandler(err => {
+      showToast('Validation error: ' + err.message, 'danger');
+    })
+    .canDeleteStudent(sessionToken, studentId);
+}
 
-         function resetButton(btn, text) {
-         btn.disabled = false;
-         btn.innerHTML = text;
-         }
 
-        function renderManagedStudentGrid(students) {
-        const body = document.getElementById('manageStudentTableBody');
-        body.innerHTML = '';
+function saveManagedStudents(btn) {
+  const schoolId = document.getElementById('manageSchoolSelect').value;
+  if (!schoolId) { showToast('No school selected.', 'warning'); return; }
 
-        if (!students || students.length === 0) {
-          body.innerHTML = `
-            <tr id="no-managed-students-row">
-              <td colspan="2" class="text-center text-muted p-3">
-                No students found. Click "Add Rows" to begin.
-              </td>
-            </tr>
-          `;
-          return;
-        }
+  const rows = document.querySelectorAll('#manageStudentTableBody tr');
+  const toSave = [];
 
-        students.forEach(s => {
-          body.innerHTML += `
-            <tr data-id="${s.studentId}">
-              <td><input class="form-control student-name" value="${s.studentName}"></td>
-              <td><input class="form-control student-class" value="${s.class}"></td>
-            </tr>
-          `;
-        });
+  rows.forEach(row => {
+    if (row.id === 'no-managed-students-row') return;
+    const name = row.querySelector('.student-name').value.trim();
+    if (name) toSave.push({ studentId: row.dataset.id || '', studentName: name, class: row.querySelector('.student-class').value.trim() });
+  });
+
+  if (!toSave.length) { showToast('No student data to save.', 'warning'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+  showLoading('Saving students...');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      showToast(res.message, res.success ? 'success' : 'danger');
+      if (res.success) {
+        delete assessmentClassStudentsBySchool[schoolId];
+        loadManagedStudents();
       }
-              
-         // Form submission handlers
-         function handleAddSchool(event) {
-         event.preventDefault();
-         const btn = event.target.querySelector('button[type="submit"]');
-         btn.disabled = true;
-         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-         
-         const schoolData = {
-           name: document.getElementById('schoolName').value,
-           region: document.getElementById('schoolRegion').value,
-           chapter: document.getElementById('schoolChapter').value,
-           taluk: document.getElementById('schoolTaluk').value,
-           district: document.getElementById('schoolDistrict').value,
-           strength: document.getElementById('schoolStrength').value,
-         };
-         
-         google.script.run
-         .withSuccessHandler(response => {
-         alert(response.message);
-         if(response.success) loadManagementView();
-         resetButton(btn, 'Add School');
-         })
-         .withFailureHandler(err => {
-         alert('Error: ' + err.message);
-         resetButton(btn, 'Add School');
-         })
-         .addSchool(schoolData)
-         }
-         
-         function handleAddVolunteer(event) {
-         event.preventDefault();
-         const btn = event.target.querySelector('button[type="submit"]');
-         btn.disabled = true;
-         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-         
-         const volunteerData = {
-           name: document.getElementById('volunteerName').value,
-           email: document.getElementById('volunteerEmail').value,
-           pin: document.getElementById('volunteerPin').value,
-           region: document.getElementById('volunteerRegion').value,
-           chapter: document.getElementById('volunteerChapter').value,
-         };
-         
-         google.script.run
-         .withSuccessHandler(response => {
-         alert(response.message);
-         if(response.success) loadManagementView();
-         resetButton(btn, 'Add Volunteer');
-         })
-         .withFailureHandler(err => {
-         alert('Error: ' + err.message);
-         resetButton(btn, 'Add Volunteer');
-         })
-         .addVolunteer(volunteerData)
-         }
-         
-         function handleMapVolunteer(event) {
-         event.preventDefault();
-         const btn = event.target.querySelector('button[type="submit"]');
-         btn.disabled = true;
-         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-         
-         const mappingData = {
-           volunteerEmail: document.getElementById('mapVolunteerSelect').value,
-           schoolId: document.getElementById('mapSchoolSelect').value,
-         };
-         
-         google.script.run
-         .withSuccessHandler(response => {
-         alert(response.message);
-         if(response.success) loadManagementView();
-         resetButton(btn, 'Create Mapping');
-         })
-         .withFailureHandler(err => {
-         alert('Error: ' + err.message);
-         resetButton(btn, 'Create Mapping');
-         })
-         .mapVolunteerToSchool(mappingData)
-         }
-         
-         function loadStudents() {
-         const schoolId = document.getElementById('studentSchoolSelect').value;
-         if (!schoolId) {
-         alert("Please select a school.");
-         return;
-         }
-         
-         const loadBtn = event.target;
-         loadBtn.disabled = true;
-         loadBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
-         
-         google.script.run
-         .withSuccessHandler(students => {
-           // This runs only on success
-           document.getElementById('student-grid-container').style.display = 'block';
-           renderStudentGrid(students || []); 
-           
-           // Final logic for success case
-           loadBtn.disabled = false;
-           loadBtn.innerHTML = 'Load Students';
-         })
-         .withFailureHandler(err => {
-             // This runs only on failure
-             alert('Error loading students: ' + err.message);
-             document.getElementById('student-grid-container').style.display = 'none';
-             
-             // Final logic for failure case
-             loadBtn.disabled = false;
-             loadBtn.innerHTML = 'Load Students';
-         })
-         .getStudentsBySchool(schoolId);
-         }
-         
-         function renderStudentGrid(students) {
-         const body = document.getElementById('studentTableBody');
-         body.innerHTML = ''; // Clear previous results
-         
-         if (!students || students.length === 0) {
-         // Display a helpful placeholder row
-         body.innerHTML = `
-         <tr id="no-students-row">
-           <td colspan="2" class="text-center text-muted p-3">
-             No students found for this school. Click "Add Rows" to begin.
-           </td>
-         </tr>
-         `;
-         return;
-         }
-         
-         let rowsHtml = '';
-         students.forEach(s => {
-         // Use data attributes for all student properties
-         rowsHtml += `
-         <tr data-id="${s.studentId}">
-           <td><input class="form-control student-name" value="${s.studentName}"></td>
-           <td><input class="form-control student-class" value="${s.class}"></td>
-         </tr>
-         `;
-         });
-         body.innerHTML = rowsHtml;
-         }
-         
-         
-        function addStudentRows() {
-          const countInput = document.getElementById('rowsToAddInput');
-          const count = parseInt(countInput.value, 10);
-          if (!count || count <= 0) {
-            alert("Please enter a valid number of rows to add.");
-            return;
-          }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save Students';
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Save Students';
+    })
+    .saveOrUpdateStudents(sessionToken, toSave, schoolId);
+}
 
-          const body = document.getElementById('manageStudentTableBody');
-          const placeholderRow = document.getElementById('no-managed-students-row');
-          if (placeholderRow) placeholderRow.remove();
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  UTILITIES
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-          for (let i = 0; i < count; i++) {
-            body.innerHTML += `
-              <tr data-id="">
-                <td><input class="form-control student-name"></td>
-                <td><input class="form-control student-class"></td>
-              </tr>
-            `;
-          }
-          countInput.value = '';
-        }
+// Live search filter for a <select> based on a search <input>
+function setupLiveSearch(searchId, selectId) {
+  const input = document.getElementById(searchId);
+  const select = document.getElementById(selectId);
+  if (!input || !select) return;
+  input.oninput = () => {
+    const term = input.value.toLowerCase();
+    Array.from(select.options).forEach(opt => {
+      opt.hidden = !opt.text.toLowerCase().includes(term);
+    });
+  };
+}
 
-        function saveManagedStudents(btn) {
-        const schoolId = document.getElementById('manageSchoolSelect').value;
-        const rows = document.querySelectorAll('#manageStudentTableBody tr');
-        const studentsToSave = [];
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-        rows.forEach(row => {
-          if (row.id === 'no-managed-students-row') return;
-          const studentName = row.querySelector('.student-name').value.trim();
-          if (studentName) {
-            studentsToSave.push({
-              studentId: row.dataset.id,
-              studentName: studentName,
-              class: row.querySelector('.student-class').value.trim()
-            });
-          }
-        });
-
-        if (studentsToSave.length === 0) {
-          alert("No student data to save.");
-          return;
-        }
-        
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-
-        google.script.run
-          .withSuccessHandler(response => {
-            // This runs on success
-            alert(response.message);
-            if (response.success) {
-              const loadButton = document.querySelector('#manage-students button[onclick^="loadManagedStudents"]');
-              if (loadButton) loadButton.click();
-            }
-
-            // "Finally" logic for success
-            btn.disabled = false;
-            btn.innerHTML = 'Save Students';
-          })
-          .withFailureHandler(err => {
-            // This runs on failure
-            alert('Save failed: ' + err.message);
-
-            // "Finally" logic for failure
-            btn.disabled = false;
-            btn.innerHTML = 'Save Students';
-          })
-          .saveOrUpdateStudents(studentsToSave, schoolId);
-      }
-
-
-         function saveStudents() {
-         const schoolId = document.getElementById('studentSchoolSelect').value;
-         if (!schoolId) {
-         alert("No school selected.");
-         return;
-         }
-         
-         const saveBtn = event.target;
-         const rows = document.querySelectorAll('#studentTableBody tr');
-         const studentsToSave = [];
-         
-         rows.forEach(row => {
-         if (row.id === 'no-students-row') return;
-         
-         const studentName = row.querySelector('.student-name').value.trim();
-         const studentClass = row.querySelector('.student-class').value.trim();
-         const studentId = row.dataset.id; 
-         
-         if (studentName) {
-         studentsToSave.push({
-           studentId: studentId,
-           studentName: studentName,
-           class: studentClass
-         });
-         }
-         });
-         
-         if (studentsToSave.length === 0) {
-         alert("No student data to save. Please enter student names.");
-         return;
-         }
-         
-         saveBtn.disabled = true;
-         saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
-         
-         google.script.run
-         .withSuccessHandler(response => {
-         // Runs on success
-         alert(response.message);
-         if (response.success) {
-           // Reload the students to get the new IDs and a clean state
-           // NOTE: We need to find the "Load Students" button to pass to the function
-           const loadStudentsButton = document.querySelector('#manage-students button[onclick="loadStudents()"]');
-           if(loadStudentsButton) loadStudentsButton.click();
-         }
-         
-         // Final logic for success case
-         saveBtn.disabled = false;
-         saveBtn.innerHTML = 'Save Students';
-         })
-         .withFailureHandler(err => {
-         // Runs on failure
-         alert('Save failed: ' + err.message);
-         
-         // Final logic for failure case
-         saveBtn.disabled = false;
-         saveBtn.innerHTML = 'Save Students';
-         })
-         .saveOrUpdateStudents(studentsToSave, schoolId);
-         }
-         
-         function setupSearchableDropdowns() {
-        // Find all the search input fields
-        document.querySelectorAll('.searchable-dropdown').forEach(input => {
-          // Store original options on the select element itself for easy reset
-          const selectEl = document.getElementById(input.dataset.targetSelect);
-          if (!selectEl.originalOptions) {
-              selectEl.originalOptions = Array.from(selectEl.options);
-          }
-
-          // Add an event listener to the search input
-          input.addEventListener('keyup', () => {
-              const searchTerm = input.value.toLowerCase();
-              
-              // Clear current options
-              selectEl.innerHTML = ''; 
-
-              // Filter and add back the matching options
-              selectEl.originalOptions.forEach(option => {
-                  if (option.text.toLowerCase().includes(searchTerm)) {
-                      selectEl.add(option);
-                  }
-              });
-          });
-        });
-      }
-      </script>
-   </body>
+function escJsString(str) {
+  return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
+}
+</script>
+</body>
 </html>
+
+
+
