@@ -50,13 +50,9 @@
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <a href="#" class="d-flex align-items-center text-decoration-none" onclick="goHome(); return false;">
-        <div class="logo-container file-input-wrapper">
-          <img id="sidebarLogo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' fill='%232563eb' viewBox='0 0 16 16'%3E%3Cpath d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z'/%3E%3C/svg%3E" class="logo-img" alt="Logo" title="Click to upload logo">
-          <input type="file" id="logoFileInput" accept="image/*" style="display:none;">
-        </div>
         <div>
-          <div class="sidebar-brand">Spoken English</div>
-          <div class="sidebar-subtitle">Portal</div>
+          <div class="sidebar-brand">Spoken English Portal</div>
+          <!-- <div class="sidebar-subtitle">Portal</div> -->
         </div>
       </a>
     </div>
@@ -70,13 +66,13 @@
       <a href="#" class="list-group-item list-group-item-action" onclick="loadAssessmentView(); closeMobileNav(); return false;" id="nav-assessment">
         <i class="bi bi-card-checklist me-2"></i> Assessment
       </a>
+      <a href="#" class="list-group-item list-group-item-action" onclick="handleLogout(); closeMobileNav(); return false;" id="nav-logout">
+        <i class="bi bi-box-arrow-right me-2"></i> Logout
+      </a>
     </div>
     <div class="p-3 rounded m-2" id="sidebar-user" style="display:none; position:absolute; bottom:20px; width:calc(100% - 1rem);">
       <small class="text-truncate d-block" style="color: rgba(255,255,255,0.8);" id="sidebarEmail"></small>
       <span class="badge mt-2" id="sidebarRole"></span>
-      <button class="btn btn-outline-light btn-sm w-100 mt-3" onclick="handleLogout()">
-        <i class="bi bi-box-arrow-right me-1"></i>Logout
-      </button>
     </div>
   </nav>
 
@@ -714,50 +710,9 @@ function showToast(message, type = 'success', duration = 4000) {
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  LOGO UPLOAD
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-function setupLogoUpload() {
-  const logoImg = document.getElementById('sidebarLogo');
-  const fileInput = document.getElementById('logoFileInput');
-  
-  // Click logo to upload
-  logoImg.addEventListener('click', () => fileInput.click());
-  
-  // Handle file selection
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const logoData = event.target.result;
-        // Save to localStorage
-        localStorage.setItem('appLogo', logoData);
-        // Update display
-        logoImg.src = logoData;
-        logoImg.title = 'Click to change logo';
-        showToast('Logo uploaded successfully!', 'success');
-      };
-      reader.readAsDataURL(file);
-    }
-  });
-}
-
-function loadStoredLogo() {
-  const storedLogo = localStorage.getItem('appLogo');
-  if (storedLogo) {
-    const logoImg = document.getElementById('sidebarLogo');
-    logoImg.src = storedLogo;
-    logoImg.title = 'Click to change logo';
-  }
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  INIT & AUTH
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 window.addEventListener('load', function() {
-  setupLogoUpload();
-  loadStoredLogo();
-  
   // Close modal when clicking outside
   document.getElementById('confirmModalOverlay').addEventListener('click', (e) => {
     if (e.target === document.getElementById('confirmModalOverlay')) {
