@@ -265,18 +265,18 @@
       <div id="manageView" class="view" style="display:none;">
         <div class="mb-4">
           <h1 style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary); margin-bottom: 0.5rem;">Management</h1>
-          <p class="text-muted mb-0">Manage schools, volunteers, mappings, and student data</p>
+          <p class="text-muted mb-0" id="manageSubtitle">Manage schools, volunteers, mappings, and student data</p>
         </div>
         <div class="card shadow-sm border-0">
           <div class="card-header bg-white border-bottom">
             <ul class="nav nav-tabs card-header-tabs" id="manageTabs">
-              <li class="nav-item">
+              <li class="nav-item" id="nav-tab-school">
                 <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-add-school" id="tab-btn-school">
                   <i class="bi bi-building-add me-1"></i>Add School
                 </button>
               </li>
               <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students" id="tab-btn-students">
                   <i class="bi bi-person-lines-fill me-1"></i>Manage Students
                 </button>
               </li>
@@ -766,8 +766,13 @@ function initializeApp(user) {
   }
   document.getElementById('sidebar-user').style.display = 'block';
   setupUIBasedOnRole(user.role);
+  const lastView = sessionStorage.getItem('yfsLastView');
   if (user.role === 'Volunteer') {
     loadManagementView();
+  } else if (lastView === 'manageView') {
+    loadManagementView();
+  } else if (lastView === 'assessmentView') {
+    loadAssessmentView();
   } else {
     switchView('dashboardView');
     loadDashboardStats();
@@ -783,7 +788,12 @@ function setupUIBasedOnRole(role) {
 function switchView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
   const t = document.getElementById(viewId);
-  if (t) t.style.display = 'block';
+  if (t) {
+    t.style.display = 'block';
+    if (viewId === 'dashboardView' || viewId === 'manageView' || viewId === 'assessmentView') {
+      sessionStorage.setItem('yfsLastView', viewId);
+    }
+  }
 }
 
 function toggleMobileNav() {
@@ -810,6 +820,7 @@ function handleLogout() {
   const token = sessionToken;
   sessionStorage.removeItem('yfsSessionToken');
   sessionStorage.removeItem('yfsSessionUser');
+  sessionStorage.removeItem('yfsLastView');
   showLoading('Logging out...');
   google.script.run
     .withSuccessHandler(res => {
@@ -1121,6 +1132,7 @@ function handleSaveAssessments(btn) {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function loadManagementView() {
   if (managementViewLoaded) {
+    updateManagementAccessUI(currentUser);
     switchView('manageView');
     return;
   }
@@ -1149,10 +1161,7 @@ function setupManagementUI(data) {
   managementViewLoaded = true;
   setCachedGeoData(geo);
 
-  // Show/hide tabs based on role
-  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor' || user.role === 'Coordinator';
-  document.getElementById('nav-tab-volunteer').style.display = canManageVols ? '' : 'none';
-  document.getElementById('nav-tab-map').style.display = canManageVols ? '' : 'none';
+  updateManagementAccessUI(user);
 
   // Setup geo dropdowns
   setupGeoDropdowns(geo, user);
@@ -1196,6 +1205,35 @@ function setupManagementUI(data) {
   document.getElementById('manage-students-container').style.display = 'none';
 
   switchView('manageView');
+}
+
+function setManageActiveTab(tabButtonId) {
+  const button = document.getElementById(tabButtonId);
+  if (!button) return;
+
+  document.querySelectorAll('#manageTabs .nav-link').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('#manageView .tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
+
+  button.classList.add('active');
+  const pane = document.querySelector(button.dataset.bsTarget);
+  if (pane) pane.classList.add('show', 'active');
+}
+
+function updateManagementAccessUI(user) {
+  if (!user) return;
+
+  const isVolunteer = user.role === 'Volunteer';
+  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor' || user.role === 'Coordinator';
+  document.getElementById('nav-tab-school').style.display = isVolunteer ? 'none' : '';
+  document.getElementById('nav-tab-volunteer').style.display = canManageVols ? '' : 'none';
+  document.getElementById('nav-tab-map').style.display = canManageVols ? '' : 'none';
+  document.getElementById('manageSubtitle').textContent = isVolunteer
+    ? 'Manage student data for your assigned schools'
+    : 'Manage schools, volunteers, mappings, and student data';
+
+  if (isVolunteer && document.getElementById('tab-btn-school').classList.contains('active')) {
+    setManageActiveTab('tab-btn-students');
+  }
 }
 
 function setupGeoDropdowns(geo, user) {
