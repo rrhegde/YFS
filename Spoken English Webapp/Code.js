@@ -527,6 +527,13 @@ function getExistingAssessmentDataForClass(token, schoolId, classValue, assessme
   return result;
 }
 
+function formatAssessmentDateForClient_(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
 function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
@@ -556,16 +563,18 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   const kpis = getKpis_();
   const assessments = getCachedSheetValues_(SHEETS.ASSESSMENTS);
   const result = {};
+  let assessmentDate = '';
   for (let i = 1; i < assessments.length; i++) {
     const row = assessments[i];
     const studentId = row[1];
     if (row[2] == schoolId && row[4] === assessmentType && String(studentClassMap[studentId]).trim() === String(classValue).trim()) {
+      if (!assessmentDate) assessmentDate = formatAssessmentDateForClient_(row[8]);
       if (!result[studentId]) result[studentId] = { status: row[7], scores: [] };
       if (row[7] === 'Present' && row[5]) result[studentId].scores.push({ kpiId: row[5], score: row[6] });
     }
   }
 
-  return { students, allStudentsForSchool, kpis, existingDataMap: result };
+  return { students, allStudentsForSchool, kpis, existingDataMap: result, assessmentDate: assessmentDate || null };
 }
 
 function getAssessmentTypesForStudent_(studentId) {
@@ -575,6 +584,27 @@ function getAssessmentTypesForStudent_(studentId) {
     if (data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
   }
   return types;
+}
+
+function parseAssessmentDate(value) {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    throw new Error('Assessment date is required.');
+  }
+
+  const rawValue = String(value).trim();
+  const isoMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    return new Date(year, month, day);
+  }
+
+  const parsed = new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Invalid assessment date.');
+  }
+  return parsed;
 }
 
 function saveAssessments(token, assessmentData) {
@@ -593,14 +623,14 @@ function saveAssessments(token, assessmentData) {
       toDelete.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`);
     });
     schoolIds.forEach(schoolId => ensureSchoolAccess_(user, schoolId));
-    const ts = new Date();
     const rows = [];
     assessmentData.forEach(item => {
-      const { studentId, schoolId, assessmentType, status, scores } = item;
-      if (status === 'Absent') rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', ts]);
+      const { studentId, schoolId, assessmentType, status, scores, assessmentDate } = item;
+      const assessmentTimestamp = parseAssessmentDate(assessmentDate);
+      if (status === 'Absent') rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', assessmentTimestamp]);
       else scores.forEach(s => {
         const score = parseInt(s.score, 10);
-        if (score >= 1 && score <= 5) rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, score, 'Present', ts]);
+        if (score >= 1 && score <= 5) rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, score, 'Present', assessmentTimestamp]);
       });
     });
     const keptRows = allData.slice(1).filter(row => !toDelete.has(`${row[1]}|${row[2]}|${row[4]}`));

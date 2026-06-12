@@ -218,17 +218,17 @@
         <div class="card shadow-sm border-0">
           <div class="card-body p-4">
             <div class="row g-3" id="assessment-setup">
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label fw-semibold">School</label>
                 <select id="schoolSelect" class="form-select"></select>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label fw-semibold">Class</label>
                 <select id="classSelect" class="form-select">
                   <option value="">--Select Class--</option>
                 </select>
               </div>
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="form-label fw-semibold">Assessment Type</label>
                 <select id="assessmentTypeSelect" class="form-select">
                   <option value="">--Select Type--</option>
@@ -237,7 +237,11 @@
                   <option value="Endline">Endline</option>
                 </select>
               </div>
-              <div class="col-md-1 d-flex align-items-end">
+              <div class="col-md-2">
+                <label class="form-label fw-semibold">Assessment Date</label>
+                <input id="assessmentDateInput" type="date" class="form-control" />
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
                 <button class="btn btn-primary w-100" onclick="loadStudentGrid(this)">
                   <i class="bi bi-arrow-repeat me-2"></i>Load
                 </button>
@@ -912,6 +916,7 @@ function loadAssessmentView(forceReset = false) {
   document.getElementById('schoolSelect').value = '';
   document.getElementById('classSelect').innerHTML = '<option value="">--Select Class--</option>';
   document.getElementById('assessmentTypeSelect').value = '';
+  document.getElementById('assessmentDateInput').value = '';
 
   if (assessmentViewLoaded) {
     switchView('assessmentView');
@@ -1023,6 +1028,10 @@ async function loadStudentGrid(btn) {
     const kpis = data.kpis || [];
     kpiMaster = kpis;
     setCachedKpis(kpis);
+
+    if (data.assessmentDate) {
+      document.getElementById('assessmentDateInput').value = data.assessmentDate;
+    }
     
     renderAssessmentGrid(students, kpis, data.existingDataMap || {});
     document.getElementById('student-grid-container').style.display = 'block';
@@ -1088,11 +1097,17 @@ function toggleAttendance(checkbox) {
 function handleSaveAssessments(btn) {
   const schoolId = document.getElementById('schoolSelect').value;
   const assessmentType = document.getElementById('assessmentTypeSelect').value;
+  const assessmentDate = document.getElementById('assessmentDateInput').value;
   const payload = [];
+
+  if (!assessmentDate) {
+    showToast('Please select an assessment date before saving.', 'warning');
+    return;
+  }
 
   document.querySelectorAll('#assessment-grid-body tr').forEach(row => {
     const isPresent = row.querySelector('.attendance-toggle').checked;
-    const item = { studentId: row.dataset.studentid, schoolId, assessmentType, status: isPresent ? 'Present' : 'Absent', scores: [] };
+    const item = { studentId: row.dataset.studentid, schoolId, assessmentType, assessmentDate, status: isPresent ? 'Present' : 'Absent', scores: [] };
     if (isPresent) {
       row.querySelectorAll('.kpi-score').forEach(inp => {
         enforceScoreLimit(inp);
