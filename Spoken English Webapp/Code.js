@@ -131,6 +131,10 @@ function invalidateVolunteerCache_() {
   invalidateSheetCache_(SHEETS.VOLUNTEERS);
 }
 
+function invalidateUserCache_() {
+  invalidateSheetCache_(SHEETS.USERS);
+}
+
 
 function normalizeEmail_(email) {
   return String(email || '').trim().toLowerCase();
@@ -236,8 +240,9 @@ function getPermissionsForUser_(user) {
   return {
     canAssess: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
     canViewManagement: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
-    canManageSchools: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
+    canManageSchools: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR].includes(role),
     canManageStudents: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
+    canManageUsers: [ROLES.ADMIN].includes(role),
     canManageVolunteers: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR].includes(role),
     canManageMappings: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR].includes(role)
   };
@@ -257,6 +262,7 @@ function canAssess_(user) { return !!(user && user.permissions && user.permissio
 function canViewManagement_(user) { return !!(user && user.permissions && user.permissions.canViewManagement); }
 function canManageSchools_(user) { return !!(user && user.permissions && user.permissions.canManageSchools); }
 function canManageStudents_(user) { return !!(user && user.permissions && user.permissions.canManageStudents); }
+function canManageUsers_(user) { return !!(user && user.permissions && user.permissions.canManageUsers); }
 function canManageVolunteers_(user) { return !!(user && user.permissions && user.permissions.canManageVolunteers); }
 function canManageMappings_(user) { return !!(user && user.permissions && user.permissions.canManageMappings); }
 
@@ -294,6 +300,18 @@ function mapSchoolRow_(row) {
 
 function mapVolunteerRow_(row) {
   return { id: row[0], name: row[1], email: row[2], region: row[4], chapter: row[5], credentialsEmailSentAt: rowValue_(row, 6) };
+}
+
+function mapUserRow_(row, headers) {
+  headers = headers || [];
+  return {
+    name: rowValue_(row, headers.indexOf('UserName')),
+    email: rowValue_(row, 0),
+    role: rowValue_(row, 1),
+    region: rowValue_(row, 3),
+    chapter: rowValue_(row, 4),
+    credentialsEmailSentAt: rowValue_(row, headers.indexOf('CredentialsEmailSentAt'))
+  };
 }
 
 function getScopedSchoolIds_(schools) {
@@ -366,6 +384,50 @@ function ensureVolunteerEmailSentColumn_(sheet) {
     sheet.getRange(1, index + 1).setValue('CredentialsEmailSentAt');
   }
   return index;
+}
+
+function ensureUserManagementColumns_(sheet) {
+  const headerRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1));
+  const headers = headerRange.getValues()[0];
+  let changed = false;
+  ['UserName', 'CredentialsEmailSentAt'].forEach(header => {
+    if (!headers.includes(header)) {
+      headers.push(header);
+      sheet.getRange(1, headers.length).setValue(header);
+      changed = true;
+    }
+  });
+  if (changed) invalidateUserCache_();
+  return {
+    nameCol: headers.indexOf('UserName'),
+    credentialsEmailSentAtCol: headers.indexOf('CredentialsEmailSentAt')
+  };
+}
+
+function ensureStudentGenderColumn_(sheet) {
+  const headerRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1));
+  const headers = headerRange.getValues()[0];
+  let index = headers.indexOf('Gender');
+  if (index === -1) {
+    index = headers.length;
+    sheet.getRange(1, index + 1).setValue('Gender');
+    invalidateSheetCache_(SHEETS.STUDENTS);
+  }
+  return index;
+}
+
+function parseAssessmentDate_(value) {
+  const raw = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) throw new Error('Please select a valid assessment date.');
+  const parts = raw.split('-').map(Number);
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function formatDateForInput_(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
 function getAppUrl_() {
@@ -457,9 +519,11 @@ function getStudentsForSchool_(schoolId) {
   const cached = getCachedJson_(key);
   if (cached) return cached;
   const data = getCachedSheetValues_(SHEETS.STUDENTS);
+  const headers = data[0] || [];
+  const genderCol = headers.indexOf('Gender');
   const students = data.slice(1)
     .filter(r => r[2] == schoolId)
-    .map(r => ({ studentId: r[0], studentName: r[1], class: r[3] }));
+    .map(r => ({ studentId: r[0], studentName: r[1], class: r[3], gender: genderCol === -1 ? '' : r[genderCol] }));
   putCachedJson_(key, students, STUDENT_CACHE_TTL_SECONDS);
   return students;
 }
@@ -531,16 +595,18 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   const kpis = getKpis_();
   const assessments = getCachedSheetValues_(SHEETS.ASSESSMENTS);
   const result = {};
+  let assessmentDate = '';
   for (let i = 1; i < assessments.length; i++) {
     const row = assessments[i];
     const studentId = row[1];
     if (row[2] == schoolId && row[4] === assessmentType && String(studentClassMap[studentId]).trim() === String(classValue).trim()) {
       if (!result[studentId]) result[studentId] = { status: row[7], scores: [] };
       if (row[7] === 'Present' && row[5]) result[studentId].scores.push({ kpiId: row[5], score: row[6] });
+      if (!assessmentDate) assessmentDate = formatDateForInput_(row[8]);
     }
   }
 
-  return { students, allStudentsForSchool, kpis, existingDataMap: result };
+  return { students, allStudentsForSchool, kpis, existingDataMap: result, assessmentDate };
 }
 
 function getAssessmentTypesForStudent_(studentId) {
@@ -555,6 +621,8 @@ function getAssessmentTypesForStudent_(studentId) {
 function saveAssessments(token, assessmentData) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
+  if (!assessmentData || !assessmentData.length) return { success: false, message: 'No assessment data to save.' };
+  const assessmentDate = parseAssessmentDate_(assessmentData[0].assessmentDate);
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy. Please try again.' };
   try {
@@ -564,16 +632,19 @@ function saveAssessments(token, assessmentData) {
     const toDelete = new Set();
     const schoolIds = new Set();
     assessmentData.forEach(item => {
+      if (item.assessmentDate !== assessmentData[0].assessmentDate) throw new Error('All rows must use the same selected assessment date.');
       schoolIds.add(item.schoolId);
       toDelete.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`);
     });
     schoolIds.forEach(schoolId => ensureSchoolAccess_(user, schoolId));
-    const ts = new Date();
     const rows = [];
     assessmentData.forEach(item => {
       const { studentId, schoolId, assessmentType, status, scores } = item;
-      if (status === 'Absent') rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', ts]);
-      else scores.forEach(s => rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, s.score, 'Present', ts]));
+      if (status === 'Absent') rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', assessmentDate]);
+      else scores.forEach(s => {
+        const score = parseInt(s.score, 10);
+        if (score >= 1 && score <= 5) rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, score, 'Present', assessmentDate]);
+      });
     });
     const keptRows = allData.slice(1).filter(row => !toDelete.has(`${row[1]}|${row[2]}|${row[4]}`));
     const output = [header].concat(keptRows, rows);
@@ -590,16 +661,117 @@ function saveAssessments(token, assessmentData) {
 function getDataForManagementView(token) {
   const user = getSessionUser(token);
   ensurePermission_(canViewManagement_(user), 'Authorization failed.');
+  if (canManageUsers_(user)) ensureUserManagementColumns_(SS.getSheetByName(SHEETS.USERS));
   const schoolsRaw = getCachedSheetValues_(SHEETS.SCHOOLS).slice(1);
+  const usersRawAll = canManageUsers_(user) ? getCachedSheetValues_(SHEETS.USERS) : [];
+  const userHeaders = usersRawAll[0] || [];
   const volRaw = getCachedSheetValues_(SHEETS.VOLUNTEERS).slice(1);
   const mappingRaw = getCachedSheetValues_(SHEETS.MAPPING).slice(1);
   const schools = filterSchoolsForUser_(schoolsRaw, user).map(mapSchoolRow_);
+  const users = canManageUsers_(user) ? usersRawAll.slice(1).map(row => mapUserRow_(row, userHeaders)) : [];
   const volunteers = canManageVolunteers_(user) ? filterVolunteersByScope_(volRaw, user).map(mapVolunteerRow_) : [];
   const schoolMap = {}; schoolsRaw.forEach(r => { schoolMap[r[0]] = r[1]; });
   const volMap = {}; volRaw.forEach(r => { volMap[r[2]] = r[1]; });
   const scopedSchoolIds = getScopedSchoolIds_(schools);
   const mappings = mappingRaw.filter(r => scopedSchoolIds.has(r[2])).map(r => ({ mappingId: r[0], volunteerEmail: r[1], volunteerName: volMap[r[1]] || r[1], schoolId: r[2], schoolName: schoolMap[r[2]] || r[2] }));
-  return { success: true, user, schools, volunteers, mappings, geoData: getGeoData_() };
+  return { success: true, user, users, schools, volunteers, mappings, geoData: getGeoData_() };
+}
+
+function addUser(token, userData) {
+  const current = getSessionUser(token);
+  ensurePermission_(canManageUsers_(current), 'Authorization failed.');
+  userData = userData || {};
+  const name = rowValue_([userData.name], 0);
+  const email = normalizeEmail_(userData.email);
+  const role = rowValue_([userData.role], 0);
+  const pin = rowValue_([userData.pin], 0);
+  const region = role === ROLES.ADMIN ? '' : rowValue_([userData.region], 0);
+  const chapter = role === ROLES.COORDINATOR ? rowValue_([userData.chapter], 0) : '';
+
+  if (!email || !role || !pin) return { success: false, message: 'Email, role, and PIN are required.' };
+  if (![ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR].includes(role)) return { success: false, message: 'Invalid role.' };
+  if (!/^\d{4}$/.test(pin)) return { success: false, message: 'PIN must be exactly 4 digits.' };
+  if (role === ROLES.SUPERVISOR && !region) return { success: false, message: 'Region is required for Supervisor.' };
+  if (role === ROLES.COORDINATOR && (!region || !chapter)) return { success: false, message: 'Region and Chapter are required for Coordinator.' };
+
+  const usersSheet = SS.getSheetByName(SHEETS.USERS);
+  const columns = ensureUserManagementColumns_(usersSheet);
+  const usersData = usersSheet.getDataRange().getValues();
+  if (usersData.slice(1).some(row => normalizeEmail_(row[0]) === email)) return { success: false, message: 'A user with this email already exists.' };
+  const volData = getCachedSheetValues_(SHEETS.VOLUNTEERS);
+  if (volData.slice(1).some(row => normalizeEmail_(row[2]) === email)) return { success: false, message: 'A volunteer with this email already exists.' };
+
+  const width = Math.max(usersSheet.getLastColumn(), 5, columns.nameCol + 1, columns.credentialsEmailSentAtCol + 1);
+  const row = new Array(width).fill('');
+  row[0] = email;
+  row[1] = role;
+  row[2] = pin;
+  row[3] = region;
+  row[4] = chapter;
+  row[columns.nameCol] = name;
+  usersSheet.appendRow(row);
+  invalidateUserCache_();
+
+  return { success: true, message: 'User added successfully!', user: { name, email, role, region, chapter, credentialsEmailSentAt: '' } };
+}
+
+function sendUserCredentialsEmail(token, userEmail) {
+  const current = getSessionUser(token);
+  ensurePermission_(canManageUsers_(current), 'Authorization failed.');
+  userEmail = normalizeEmail_(userEmail);
+
+  const sheet = SS.getSheetByName(SHEETS.USERS);
+  const columns = ensureUserManagementColumns_(sheet);
+  const data = sheet.getDataRange().getValues();
+  let row = null;
+  let rowNumber = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (normalizeEmail_(data[i][0]) === userEmail) {
+      row = data[i];
+      rowNumber = i + 1;
+      break;
+    }
+  }
+  if (!row) return { success: false, message: 'User not found.' };
+
+  const appUrl = getAppUrl_();
+  const name = rowValue_(row, columns.nameCol);
+  const email = rowValue_(row, 0);
+  const role = rowValue_(row, 1);
+  const pin = rowValue_(row, 2);
+  const body = [
+    `Hello ${name || role || 'User'},`,
+    '',
+    'Your login details for the YFS Spoken English Portal are below:',
+    '',
+    `App link: ${appUrl || 'Please use the YFS Spoken English Portal link shared by your administrator.'}`,
+    `Email: ${email}`,
+    `PIN: ${pin}`,
+    `Role: ${role}`,
+    '',
+    'Please keep this PIN private.',
+    '',
+    'Regards,',
+    'YFS Spoken English Team'
+  ].join('\n');
+
+  MailApp.sendEmail({ to: email, subject: 'YFS Spoken English Portal login details', body, name: 'YFS Spoken English Portal' });
+
+  const sentAt = new Date();
+  sheet.getRange(rowNumber, columns.credentialsEmailSentAtCol + 1).setValue(sentAt);
+  invalidateUserCache_();
+  return {
+    success: true,
+    message: 'Credentials email sent successfully.',
+    user: {
+      name,
+      email,
+      role,
+      region: rowValue_(row, 3),
+      chapter: rowValue_(row, 4),
+      credentialsEmailSentAt: sentAt.toISOString()
+    }
+  };
 }
 
 function addSchool(token, schoolData) {
@@ -693,6 +865,41 @@ function sendVolunteerCredentialsEmail(token, volunteerEmail) {
   };
 }
 
+function canDeleteUser(token, userEmail) {
+  const current = getSessionUser(token);
+  ensurePermission_(canManageUsers_(current), 'Authorization failed.');
+  userEmail = normalizeEmail_(userEmail);
+  if (normalizeEmail_(current.email) === userEmail) {
+    return { canDelete: false, reason: 'You cannot delete the user you are currently logged in as.' };
+  }
+
+  const data = getCachedSheetValues_(SHEETS.USERS);
+  const matches = data.slice(1).filter(row => normalizeEmail_(row[0]) === userEmail);
+  if (!matches.length) return { canDelete: false, reason: 'User not found.' };
+
+  const adminCount = data.slice(1).filter(row => rowValue_(row, 1) === ROLES.ADMIN && normalizeEmail_(row[0])).length;
+  if (rowValue_(matches[0], 1) === ROLES.ADMIN && adminCount <= 1) {
+    return { canDelete: false, reason: 'At least one admin user must remain.' };
+  }
+  return { canDelete: true };
+}
+
+function deleteUser(token, userEmail) {
+  const validation = canDeleteUser(token, userEmail);
+  if (!validation.canDelete) return { success: false, message: validation.reason };
+  userEmail = normalizeEmail_(userEmail);
+  const sheet = SS.getSheetByName(SHEETS.USERS);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (normalizeEmail_(data[i][0]) === userEmail) {
+      sheet.deleteRow(i + 1);
+      invalidateUserCache_();
+      return { success: true };
+    }
+  }
+  return { success: false, message: 'User not found.' };
+}
+
 function mapVolunteerToSchool(token, mappingData) {
   const user = getSessionUser(token);
   ensurePermission_(canManageMappings_(user), 'Authorization failed.');
@@ -765,10 +972,11 @@ function saveOrUpdateStudents(token, students, schoolId) {
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy, please try again.' };
   try {
     const sheet = SS.getSheetByName(SHEETS.STUDENTS);
+    ensureStudentGenderColumn_(sheet);
     const all = sheet.getDataRange().getValues();
     const headers = all.shift();
-    const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class');
-    if ([idCol, nameCol, classCol].includes(-1)) throw new Error('Required column missing in Students sheet.');
+    const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class'), genderCol = headers.indexOf('Gender');
+    if ([idCol, nameCol, classCol, genderCol].includes(-1)) throw new Error('Required column missing in Students sheet.');
     const idToIndex = {};
     all.forEach((row, i) => { if (row[idCol]) idToIndex[row[idCol]] = i; });
     const ts = new Date();
@@ -778,12 +986,14 @@ function saveOrUpdateStudents(token, students, schoolId) {
         if (all[rowIndex][2] != schoolId) throw new Error('A student row does not belong to the selected school.');
         all[rowIndex][nameCol] = s.studentName;
         all[rowIndex][classCol] = s.class;
+        all[rowIndex][genderCol] = s.gender || '';
       } else {
         const row = new Array(headers.length).fill('');
         row[idCol] = 'STU-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
         row[nameCol] = s.studentName;
         row[2] = schoolId;
         row[classCol] = s.class;
+        row[genderCol] = s.gender || '';
         if (headers.length > 4) row[4] = ts;
         all.push(row);
       }
@@ -899,6 +1109,7 @@ function getAppData(sessionToken) {
     const permissions = user.permissions || {
       canManageSchools: false,
       canManageStudents: false,
+      canManageUsers: false,
       canManageVolunteers: false,
       canMapVolunteers: false,
       canAssess: false
@@ -911,6 +1122,10 @@ function getAppData(sessionToken) {
     // Get operational data (user-scoped)
     const schoolsRaw = getCachedSheetValues_(SHEETS.SCHOOLS).slice(1);
     const schools = filterSchoolsForUser_(schoolsRaw, user).map(mapSchoolRow_);
+
+    if (canManageUsers_(user)) ensureUserManagementColumns_(SS.getSheetByName(SHEETS.USERS));
+    const usersRawAll = canManageUsers_(user) ? getCachedSheetValues_(SHEETS.USERS) : [];
+    const users = canManageUsers_(user) ? usersRawAll.slice(1).map(row => mapUserRow_(row, usersRawAll[0] || [])) : [];
     
     const volRaw = getCachedSheetValues_(SHEETS.VOLUNTEERS).slice(1);
     const volunteers = canManageVolunteers_(user) ? filterVolunteersByScope_(volRaw, user).map(mapVolunteerRow_) : [];
@@ -941,6 +1156,7 @@ function getAppData(sessionToken) {
       permissions: {
         canManageSchools: permissions.canManageSchools,
         canManageStudents: permissions.canManageStudents,
+        canManageUsers: permissions.canManageUsers,
         canManageVolunteers: permissions.canManageVolunteers,
         canMapVolunteers: permissions.canManageMappings,
         canAssess: permissions.canAssess
@@ -951,6 +1167,7 @@ function getAppData(sessionToken) {
         cacheVersion: CACHE_VERSION
       },
       dashboard,
+      users,
       schools,
       volunteers,
       mappings

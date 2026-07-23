@@ -50,13 +50,9 @@
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <a href="#" class="d-flex align-items-center text-decoration-none" onclick="goHome(); return false;">
-        <div class="logo-container file-input-wrapper">
-          <img id="sidebarLogo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' fill='%232563eb' viewBox='0 0 16 16'%3E%3Cpath d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z'/%3E%3C/svg%3E" class="logo-img" alt="Logo" title="Click to upload logo">
-          <input type="file" id="logoFileInput" accept="image/*" style="display:none;">
-        </div>
         <div>
-          <div class="sidebar-brand">Spoken English</div>
-          <div class="sidebar-subtitle">Portal</div>
+          <div class="sidebar-brand">Spoken English Portal</div>
+          <!-- <div class="sidebar-subtitle">Portal</div> -->
         </div>
       </a>
     </div>
@@ -238,6 +234,10 @@
                   <option value="Endline">Endline</option>
                 </select>
               </div>
+              <div class="col-md-2">
+                <label class="form-label fw-semibold">Assessment Date</label>
+                <input type="date" id="assessmentDateInput" class="form-control">
+              </div>
               <div class="col-md-1 d-flex align-items-end">
                 <button class="btn btn-primary w-100" onclick="loadStudentGrid(this)">
                   <i class="bi bi-arrow-repeat me-2"></i>Load
@@ -266,19 +266,24 @@
       <div id="manageView" class="view" style="display:none;">
         <div class="mb-4">
           <h1 style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary); margin-bottom: 0.5rem;">Management</h1>
-          <p class="text-muted mb-0">Manage schools, volunteers, mappings, and student data</p>
+          <p class="text-muted mb-0" id="manageSubtitle">Manage schools, users, volunteers, mappings, and student data</p>
         </div>
         <div class="card shadow-sm border-0">
           <div class="card-header bg-white border-bottom">
             <ul class="nav nav-tabs card-header-tabs" id="manageTabs">
-              <li class="nav-item">
+              <li class="nav-item" id="nav-tab-school">
                 <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-add-school" id="tab-btn-school">
                   <i class="bi bi-building-add me-1"></i>Add School
                 </button>
               </li>
               <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students" id="tab-btn-students">
                   <i class="bi bi-person-lines-fill me-1"></i>Manage Students
+                </button>
+              </li>
+              <li class="nav-item" id="nav-tab-user" style="display:none;">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-add-user">
+                  <i class="bi bi-person-gear me-1"></i>Add User
                 </button>
               </li>
               <li class="nav-item" id="nav-tab-volunteer" style="display:none;">
@@ -464,6 +469,73 @@
                 </div>
               </div>
 
+              <!-- ADD USER TAB -->
+              <div class="tab-pane fade" id="tab-add-user">
+                <div class="row g-4">
+                  <div class="col-lg-5">
+                    <h5 class="mb-3">New User</h5>
+                    <div id="userFormAlert" class="alert alert-warning py-2 px-3 d-flex align-items-center gap-2" style="display:none !important;">
+                      <i class="bi bi-exclamation-triangle-fill"></i>
+                      <span id="userFormAlertMsg"></span>
+                    </div>
+                    <div class="row g-3">
+                      <div class="col-12">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" id="userName" class="form-control" placeholder="e.g. Priya Sharma">
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" id="userEmailInput" class="form-control" placeholder="priya@example.com">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">Role <span class="text-danger">*</span></label>
+                        <select id="userRoleSelect" class="form-select" onchange="handleUserRoleChange()">
+                          <option value="">--Select Role--</option>
+                          <option value="Admin">Admin</option>
+                          <option value="Supervisor">Supervisor</option>
+                          <option value="Coordinator">Coordinator</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">PIN (4 digits) <span class="text-danger">*</span></label>
+                        <input type="text" id="userPin" class="form-control" placeholder="PIN" maxlength="4" pattern="\d{4}">
+                      </div>
+                      <div class="col-md-6" id="userRegionWrapper">
+                        <label class="form-label">Region</label>
+                        <select id="userRegion" class="form-select">
+                          <option value="">--Select Region--</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6" id="userChapterWrapper">
+                        <label class="form-label">Chapter</label>
+                        <select id="userChapter" class="form-select" disabled>
+                          <option value="">--Select Region first--</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button class="btn btn-primary mt-4" onclick="handleAddUser(this)">
+                      <i class="bi bi-plus-circle me-1"></i>Add User
+                    </button>
+                  </div>
+                  <div class="col-lg-7">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h5 class="mb-0">Users <span class="badge bg-secondary" id="userCountBadge">0</span></h5>
+                    </div>
+                    <input type="text" id="userTableSearch" class="form-control form-control-sm mb-2" placeholder="&#128269; Search users...">
+                    <div class="table-responsive" style="max-height:380px; overflow-y:auto;">
+                      <table class="table table-sm table-hover align-middle">
+                        <thead class="table-light sticky-top">
+                          <tr><th>Name/Email</th><th>Role</th><th>Scope</th><th class="text-center">Credentials</th><th class="text-center">Del</th></tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                          <tr><td colspan="5" class="text-center text-muted p-3">No users loaded yet.</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- â•â•â• MAP VOLUNTEER TAB â•â•â• -->
               <div class="tab-pane fade" id="tab-map-volunteer">
                 <div class="row g-4">
@@ -537,22 +609,22 @@
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  GLOBAL STATE
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let currentUser = null;
-let sessionToken = '<?= sessionToken ?>' || sessionStorage.getItem('yfsSessionToken') || '';
-let bootstrappedUser = <?!= userJson ?> || JSON.parse(sessionStorage.getItem('yfsSessionUser') || 'null');
-let kpiMaster = [];
-let studentsList = [];
-let geoData = { regions: [], chapters: {} };
-let mgmtData = { schools: [], volunteers: [], mappings: [] };
-let assessmentSchools = [];
-let assessmentViewLoaded = false;
-let managementViewLoaded = false;
-let assessmentClassStudentsBySchool = {};
+var currentUser = null;
+var sessionToken = '<?= sessionToken ?>' || sessionStorage.getItem('yfsSessionToken') || '';
+var bootstrappedUser = <?!= userJson ?> || JSON.parse(sessionStorage.getItem('yfsSessionUser') || 'null');
+var kpiMaster = [];
+var studentsList = [];
+var geoData = { regions: [], chapters: {} };
+var mgmtData = { users: [], schools: [], volunteers: [], mappings: [] };
+var assessmentSchools = [];
+var assessmentViewLoaded = false;
+var managementViewLoaded = false;
+var assessmentClassStudentsBySchool = {};
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CONFIRMATION MODAL
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let confirmModalCallback = null;
+var confirmModalCallback = null;
 
 const CACHE_VERSION = '1.0';
 
@@ -622,8 +694,8 @@ function refreshManagementData() {
     google.script.run
       .withSuccessHandler(data => {
         if (data && data.success) {
-          const { schools, volunteers, mappings, geoData: geo } = data;
-          mgmtData = { schools, volunteers, mappings };
+          const { users, schools, volunteers, mappings, geoData: geo } = data;
+          mgmtData = { users: users || [], schools, volunteers, mappings };
           geoData = geo;
           managementViewLoaded = true;
           setCachedGeoData(geo);
@@ -716,6 +788,7 @@ function showToast(message, type = 'success', duration = 4000) {
 function setupLogoUpload() {
   const logoImg = document.getElementById('sidebarLogo');
   const fileInput = document.getElementById('logoFileInput');
+  if (!logoImg || !fileInput) return;
   
   // Click logo to upload
   logoImg.addEventListener('click', () => fileInput.click());
@@ -743,6 +816,7 @@ function loadStoredLogo() {
   const storedLogo = localStorage.getItem('appLogo');
   if (storedLogo) {
     const logoImg = document.getElementById('sidebarLogo');
+    if (!logoImg) return;
     logoImg.src = storedLogo;
     logoImg.title = 'Click to change logo';
   }
@@ -916,6 +990,7 @@ function loadAssessmentView(forceReset = false) {
   document.getElementById('schoolSelect').value = '';
   document.getElementById('classSelect').innerHTML = '<option value="">--Select Class--</option>';
   document.getElementById('assessmentTypeSelect').value = '';
+  document.getElementById('assessmentDateInput').value = '';
 
   if (assessmentViewLoaded) {
     switchView('assessmentView');
@@ -999,12 +1074,13 @@ async function loadStudentGrid(btn) {
   const schoolId = document.getElementById('schoolSelect').value;
   const classFilter = document.getElementById('classSelect').value;
   const assessmentType = document.getElementById('assessmentTypeSelect').value;
+  const assessmentDate = document.getElementById('assessmentDateInput').value;
   const errDiv = document.getElementById('validation-error');
   errDiv.style.display = 'none';
   document.getElementById('student-grid-container').style.display = 'none';
 
-  if (!schoolId || !classFilter || !assessmentType) {
-    errDiv.textContent = 'Please select a school, class, and assessment type.';
+  if (!schoolId || !classFilter || !assessmentType || !assessmentDate) {
+    errDiv.textContent = 'Please select a school, class, assessment type, and assessment date.';
     errDiv.style.display = 'block';
     return;
   }
@@ -1027,6 +1103,7 @@ async function loadStudentGrid(btn) {
     const kpis = data.kpis || [];
     kpiMaster = kpis;
     setCachedKpis(kpis);
+    if (data.assessmentDate) document.getElementById('assessmentDateInput').value = data.assessmentDate;
     
     renderAssessmentGrid(students, kpis, data.existingDataMap || {});
     document.getElementById('student-grid-container').style.display = 'block';
@@ -1064,7 +1141,7 @@ function renderAssessmentGrid(students, kpis, existingDataMap = {}) {
         const value = scoresByKpi[kpi.id] || '';
         // Disable score inputs if the student was marked absent
         const disabled = isAbsent ? 'disabled' : '';
-        bodyHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${kpi.id}" min="1" max="5" value="${value}" style="width:65px;margin:auto;" ${disabled}></td>`;
+        bodyHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${kpi.id}" min="1" max="5" value="${value}" style="width:65px;margin:auto;" ${disabled} oninput="enforceScoreLimit(this)" onblur="enforceScoreLimit(this)"></td>`;
     });
 
     // Conditionally set the toggle and label based on the 'isAbsent' status
@@ -1092,14 +1169,21 @@ function toggleAttendance(checkbox) {
 function handleSaveAssessments(btn) {
   const schoolId = document.getElementById('schoolSelect').value;
   const assessmentType = document.getElementById('assessmentTypeSelect').value;
+  const assessmentDate = document.getElementById('assessmentDateInput').value;
   const payload = [];
+
+  if (!assessmentDate) {
+    showToast('Please select the assessment date before saving.', 'warning');
+    return;
+  }
 
   document.querySelectorAll('#assessment-grid-body tr').forEach(row => {
     const isPresent = row.querySelector('.attendance-toggle').checked;
-    const item = { studentId: row.dataset.studentid, schoolId, assessmentType, status: isPresent ? 'Present' : 'Absent', scores: [] };
+    const item = { studentId: row.dataset.studentid, schoolId, assessmentType, assessmentDate, status: isPresent ? 'Present' : 'Absent', scores: [] };
     if (isPresent) {
       row.querySelectorAll('.kpi-score').forEach(inp => {
-        if (inp.value) item.scores.push({ kpiId: inp.dataset.kpiid, score: parseInt(inp.value) });
+        enforceScoreLimit(inp);
+        if (inp.value) item.scores.push({ kpiId: inp.dataset.kpiid, score: parseInt(inp.value, 10) });
       });
     }
     payload.push(item);
@@ -1135,6 +1219,7 @@ function handleSaveAssessments(btn) {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function loadManagementView() {
   if (managementViewLoaded) {
+    updateManagementAccessUI(currentUser);
     switchView('manageView');
     return;
   }
@@ -1157,16 +1242,13 @@ function loadManagementView() {
 }
 
 function setupManagementUI(data) {
-  const { user, schools, volunteers, mappings, geoData: geo } = data;
-  mgmtData = { schools, volunteers, mappings };
+  const { user, users, schools, volunteers, mappings, geoData: geo } = data;
+  mgmtData = { users: users || [], schools, volunteers, mappings };
   geoData = geo;
   managementViewLoaded = true;
   setCachedGeoData(geo);
 
-  // Show/hide tabs based on role
-  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor' || user.role === 'Coordinator';
-  document.getElementById('nav-tab-volunteer').style.display = canManageVols ? '' : 'none';
-  document.getElementById('nav-tab-map').style.display = canManageVols ? '' : 'none';
+  updateManagementAccessUI(user);
 
   // Setup geo dropdowns
   setupGeoDropdowns(geo, user);
@@ -1197,6 +1279,7 @@ function setupManagementUI(data) {
 
   // Render all tables
   renderSchoolsTable(schools);
+  renderUsersTable(mgmtData.users);
   renderVolunteersTable(volunteers);
   renderMappingsTable(mappings);
 
@@ -1212,6 +1295,36 @@ function setupManagementUI(data) {
   switchView('manageView');
 }
 
+function setManageActiveTab(tabButtonId) {
+  const button = document.getElementById(tabButtonId);
+  if (!button) return;
+  document.querySelectorAll('#manageTabs .nav-link').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('#manageView .tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
+  button.classList.add('active');
+  const pane = document.querySelector(button.dataset.bsTarget);
+  if (pane) pane.classList.add('show', 'active');
+}
+
+function updateManagementAccessUI(user) {
+  if (!user) return;
+  const isVolunteer = user.role === 'Volunteer';
+  const isAdmin = user.role === 'Admin';
+  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor' || user.role === 'Coordinator';
+  document.getElementById('nav-tab-school').style.display = isVolunteer ? 'none' : '';
+  document.getElementById('nav-tab-user').style.display = isAdmin ? '' : 'none';
+  document.getElementById('nav-tab-volunteer').style.display = canManageVols ? '' : 'none';
+  document.getElementById('nav-tab-map').style.display = canManageVols ? '' : 'none';
+  document.getElementById('manageSubtitle').textContent = isVolunteer
+    ? 'Manage student data for your assigned schools'
+    : 'Manage schools, users, volunteers, mappings, and student data';
+
+  if (isVolunteer && document.getElementById('tab-btn-school').classList.contains('active')) {
+    setManageActiveTab('tab-btn-students');
+  } else if (!isAdmin && document.querySelector('#nav-tab-user .nav-link').classList.contains('active')) {
+    setManageActiveTab(isVolunteer ? 'tab-btn-students' : 'tab-btn-school');
+  }
+}
+
 function setupGeoDropdowns(geo, user) {
   const isAdmin = user.role === 'Admin';
   const isSupervisor = user.role === 'Supervisor';
@@ -1222,6 +1335,8 @@ function setupGeoDropdowns(geo, user) {
   // Volunteer dropdowns
   const volRegion = document.getElementById('volunteerRegion');
   const volChapter = document.getElementById('volunteerChapter');
+  const userRegion = document.getElementById('userRegion');
+  const userChapter = document.getElementById('userChapter');
 
   function populateRegion(sel, chapSel) {
     sel.innerHTML = '<option value="">--Select Region--</option>';
@@ -1257,8 +1372,10 @@ function setupGeoDropdowns(geo, user) {
   if (isAdmin) {
     populateRegion(schRegion, schChapter);
     populateRegion(volRegion, volChapter);
+    populateRegion(userRegion, userChapter);
     schChapter.disabled = true;
     volChapter.disabled = true;
+    userChapter.disabled = true;
   } else if (isSupervisor) {
     lockRegionAllowChapter(schRegion, schChapter);
     lockRegionAllowChapter(volRegion, volChapter);
@@ -1434,6 +1551,195 @@ function refreshSchoolSelects() {
     schSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
     manageSel.innerHTML += `<option value="${s.id}">${s.name}</option>`;
   });
+}
+
+function handleUserRoleChange() {
+  const role = document.getElementById('userRoleSelect').value;
+  const region = document.getElementById('userRegion');
+  const chapter = document.getElementById('userChapter');
+  region.disabled = role === 'Admin';
+  chapter.disabled = role !== 'Coordinator';
+  if (role === 'Admin') {
+    region.value = '';
+    chapter.innerHTML = '<option value="">--Select Region first--</option>';
+  }
+}
+
+function showUserFormAlert(msg) {
+  const el = document.getElementById('userFormAlert');
+  document.getElementById('userFormAlertMsg').textContent = msg;
+  el.style.setProperty('display', 'flex', 'important');
+  setTimeout(() => el.style.setProperty('display', 'none', 'important'), 5000);
+}
+
+function renderUsersTable(users) {
+  const body = document.getElementById('usersTableBody');
+  if (!body) return;
+  document.getElementById('userCountBadge').textContent = users.length;
+  if (!users.length) {
+    body.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-3">No users yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = users.map(u => `
+    <tr>
+      <td><div class="fw-semibold">${escHtml(u.name || u.email)}</div><small class="text-muted">${escHtml(u.email)}</small></td>
+      <td>${escHtml(u.role || '')}</td>
+      <td><small>${escHtml([u.region, u.chapter].filter(Boolean).join(' / ') || 'PAN India')}</small></td>
+      <td class="text-center">
+        <button class="btn btn-outline-primary btn-sm" onclick="handleSendUserCredentials('${escJsString(u.email)}', this)" title="${u.credentialsEmailSentAt ? 'Resend login credentials' : 'Send login credentials'}">
+          <i class="bi bi-envelope${u.credentialsEmailSentAt ? '-check' : ''} me-1"></i>${u.credentialsEmailSentAt ? 'Resend email' : 'Send email'}
+        </button>
+        ${u.credentialsEmailSentAt ? `<div><small class="text-muted">Sent ${escHtml(formatCredentialEmailDate(u.credentialsEmailSentAt))}</small></div>` : ''}
+      </td>
+      <td class="text-center">
+        <button class="btn btn-outline-danger btn-sm" onclick="handleDeleteUser('${escJsString(u.email)}', this)" title="Delete user">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+
+  const searchEl = document.getElementById('userTableSearch');
+  if (searchEl) {
+    searchEl.oninput = function() {
+      const term = this.value.toLowerCase();
+      document.querySelectorAll('#usersTableBody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      });
+    };
+  }
+}
+
+function handleAddUser(btn) {
+  const name = document.getElementById('userName').value.trim();
+  const email = document.getElementById('userEmailInput').value.trim();
+  const role = document.getElementById('userRoleSelect').value;
+  const pin = document.getElementById('userPin').value.trim();
+  const region = document.getElementById('userRegion').value;
+  const chapter = document.getElementById('userChapter').value;
+
+  if (!email || !role || !pin) {
+    showUserFormAlert('Please fill in Email, Role, and PIN.');
+    return;
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    showUserFormAlert('PIN must be exactly 4 digits.');
+    return;
+  }
+  if (role === 'Supervisor' && !region) {
+    showUserFormAlert('Region is required for Supervisor.');
+    return;
+  }
+  if (role === 'Coordinator' && (!region || !chapter)) {
+    showUserFormAlert('Region and Chapter are required for Coordinator.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Adding...';
+  showLoading('Adding user...');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res.success) {
+        showToast(res.message, 'success');
+        mgmtData.users.push(res.user);
+        renderUsersTable(mgmtData.users);
+        ['userName','userEmailInput','userPin'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('userRoleSelect').value = '';
+        document.getElementById('userRegion').value = '';
+        document.getElementById('userChapter').innerHTML = '<option value="">--Select Region first--</option>';
+        document.getElementById('userChapter').disabled = true;
+      } else {
+        showToast(res.message, 'danger');
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add User';
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast(err.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Add User';
+    })
+    .addUser(sessionToken, { name, email, role, pin, region, chapter });
+}
+
+function handleSendUserCredentials(userEmail, btn) {
+  const user = mgmtData.users.find(u => u.email === userEmail);
+  if (!user) return;
+  const actionLabel = user.credentialsEmailSentAt ? 'Resend email' : 'Send email';
+  showConfirmModal(
+    actionLabel,
+    `Send login credentials and the app link to ${user.name || user.email} at ${user.email}?`,
+    () => {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res.success) {
+            const idx = mgmtData.users.findIndex(u => u.email === userEmail);
+            if (idx !== -1) mgmtData.users[idx] = res.user;
+            renderUsersTable(mgmtData.users);
+            showToast(res.message, 'success');
+          } else {
+            showToast(res.message || 'Could not send email.', 'danger');
+            renderUsersTable(mgmtData.users);
+          }
+        })
+        .withFailureHandler(err => {
+          showToast(err.message, 'danger');
+          renderUsersTable(mgmtData.users);
+        })
+        .sendUserCredentialsEmail(sessionToken, userEmail);
+    },
+    { confirmLabel: actionLabel, confirmClass: 'btn btn-primary', confirmIcon: 'bi-envelope-fill' }
+  );
+}
+
+function handleDeleteUser(userEmail, btn) {
+  const user = mgmtData.users.find(u => u.email === userEmail);
+  if (!user) return;
+  showLoading('Validating deletion...');
+  google.script.run
+    .withSuccessHandler(validation => {
+      hideLoading();
+      if (!validation.canDelete) {
+        showToast(validation.reason, 'warning');
+        return;
+      }
+      showConfirmModal(
+        'Delete User',
+        `Are you sure you want to delete "${user.name || user.email}"? This action cannot be undone.`,
+        () => {
+          btn.disabled = true;
+          showLoading('Deleting user...');
+          google.script.run
+            .withSuccessHandler(res => {
+              hideLoading();
+              if (res.success) {
+                mgmtData.users = mgmtData.users.filter(u => u.email !== userEmail);
+                renderUsersTable(mgmtData.users);
+                showToast('User deleted successfully.', 'success');
+              } else {
+                showToast(res.message || 'Could not delete user.', 'danger');
+                btn.disabled = false;
+              }
+            })
+            .withFailureHandler(err => {
+              hideLoading();
+              showToast(err.message, 'danger');
+              btn.disabled = false;
+            })
+            .deleteUser(sessionToken, userEmail);
+        }
+      );
+    })
+    .withFailureHandler(err => {
+      hideLoading();
+      showToast('Validation error: ' + err.message, 'danger');
+    })
+    .canDeleteUser(sessionToken, userEmail);
 }
 
 // â”€â”€â”€ Volunteers Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1931,6 +2237,18 @@ function escHtml(str) {
 
 function escJsString(str) {
   return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
+}
+
+function enforceScoreLimit(input) {
+  if (input.value === '') return;
+  let value = parseInt(input.value, 10);
+  if (Number.isNaN(value)) {
+    input.value = '';
+    return;
+  }
+  if (value < 1) value = 1;
+  if (value > 5) value = 5;
+  input.value = value;
 }
 </script>
 </body>
