@@ -69,6 +69,32 @@
   </div>
 
 <script>
+  window.addEventListener('load', resumeExistingSession);
+
+  function resumeExistingSession() {
+    const token = sessionStorage.getItem('yfsSessionToken');
+    if (!token) return;
+
+    const loginBtn = document.getElementById('loginBtn');
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Restoring...';
+
+    google.script.run
+      .withSuccessHandler(html => {
+        document.open();
+        document.write(html);
+        document.close();
+      })
+      .withFailureHandler(() => {
+        sessionStorage.removeItem('yfsSessionToken');
+        sessionStorage.removeItem('yfsSessionUser');
+        sessionStorage.removeItem('yfsLastView');
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Login';
+      })
+      .loadMainApp(token);
+  }
+
   function handleLogin(event) {
     event.preventDefault();
     const email = document.getElementById('email').value;
@@ -85,6 +111,7 @@
         if (response.success) {
           sessionStorage.setItem('yfsSessionToken', response.token);
           sessionStorage.setItem('yfsSessionUser', JSON.stringify(response.user));
+          sessionStorage.removeItem('yfsLastView');
           document.open();
           document.write(response.html);
           document.close();

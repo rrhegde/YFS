@@ -21,6 +21,12 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+function getLoginPageHtml() {
+  return HtmlService.createTemplateFromFile('LoginPage')
+    .evaluate()
+    .getContent();
+}
+
 function verifyUserCredentials(email, pin) {
   try {
     email = normalizeEmail_(email);
@@ -81,6 +87,11 @@ function getSessionUser(token) {
 
 function requireUser_(token) {
   return getSessionUser(token);
+}
+
+function logoutAndGetLoginPage(token) {
+  if (token) removeCached_('session:' + token);
+  return { success: true, url: getAppUrl_(), html: getLoginPageHtml() };
 }
 
 function getCachedJson_(key) {
@@ -236,7 +247,7 @@ function getPermissionsForUser_(user) {
   return {
     canAssess: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
     canViewManagement: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
-    canManageSchools: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
+    canManageSchools: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR].includes(role),
     canManageStudents: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR, ROLES.VOLUNTEER].includes(role),
     canManageVolunteers: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR].includes(role),
     canManageMappings: [ROLES.ADMIN, ROLES.SUPERVISOR, ROLES.COORDINATOR].includes(role)
@@ -368,6 +379,18 @@ function ensureVolunteerEmailSentColumn_(sheet) {
   return index;
 }
 
+function ensureStudentGenderColumn_(sheet) {
+  const headerRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1));
+  const headers = headerRange.getValues()[0];
+  let index = headers.indexOf('Gender');
+  if (index === -1) {
+    index = headers.length;
+    sheet.getRange(1, index + 1).setValue('Gender');
+    invalidateSheetCache_(SHEETS.STUDENTS);
+  }
+  return index;
+}
+
 function getAppUrl_() {
   try {
     return ScriptApp.getService().getUrl() || '';
@@ -457,9 +480,11 @@ function getStudentsForSchool_(schoolId) {
   const cached = getCachedJson_(key);
   if (cached) return cached;
   const data = getCachedSheetValues_(SHEETS.STUDENTS);
+  const headers = data[0] || [];
+  const genderCol = headers.indexOf('Gender');
   const students = data.slice(1)
     .filter(r => r[2] == schoolId)
-    .map(r => ({ studentId: r[0], studentName: r[1], class: r[3] }));
+    .map(r => ({ studentId: r[0], studentName: r[1], class: r[3], gender: genderCol === -1 ? '' : r[genderCol] }));
   putCachedJson_(key, students, STUDENT_CACHE_TTL_SECONDS);
   return students;
 }
@@ -502,6 +527,13 @@ function getExistingAssessmentDataForClass(token, schoolId, classValue, assessme
   return result;
 }
 
+function formatAssessmentDateForClient_(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
 function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
@@ -531,16 +563,18 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   const kpis = getKpis_();
   const assessments = getCachedSheetValues_(SHEETS.ASSESSMENTS);
   const result = {};
+  let assessmentDate = '';
   for (let i = 1; i < assessments.length; i++) {
     const row = assessments[i];
     const studentId = row[1];
     if (row[2] == schoolId && row[4] === assessmentType && String(studentClassMap[studentId]).trim() === String(classValue).trim()) {
+      if (!assessmentDate) assessmentDate = formatAssessmentDateForClient_(row[8]);
       if (!result[studentId]) result[studentId] = { status: row[7], scores: [] };
       if (row[7] === 'Present' && row[5]) result[studentId].scores.push({ kpiId: row[5], score: row[6] });
     }
   }
 
-  return { students, allStudentsForSchool, kpis, existingDataMap: result };
+  return { students, allStudentsForSchool, kpis, existingDataMap: result, assessmentDate: assessmentDate || null };
 }
 
 function getAssessmentTypesForStudent_(studentId) {
@@ -550,6 +584,27 @@ function getAssessmentTypesForStudent_(studentId) {
     if (data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
   }
   return types;
+}
+
+function parseAssessmentDate(value) {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    throw new Error('Assessment date is required.');
+  }
+
+  const rawValue = String(value).trim();
+  const isoMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    return new Date(year, month, day);
+  }
+
+  const parsed = new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Invalid assessment date.');
+  }
+  return parsed;
 }
 
 function saveAssessments(token, assessmentData) {
@@ -568,12 +623,15 @@ function saveAssessments(token, assessmentData) {
       toDelete.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`);
     });
     schoolIds.forEach(schoolId => ensureSchoolAccess_(user, schoolId));
-    const ts = new Date();
     const rows = [];
     assessmentData.forEach(item => {
-      const { studentId, schoolId, assessmentType, status, scores } = item;
-      if (status === 'Absent') rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', ts]);
-      else scores.forEach(s => rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, s.score, 'Present', ts]));
+      const { studentId, schoolId, assessmentType, status, scores, assessmentDate } = item;
+      const assessmentTimestamp = parseAssessmentDate(assessmentDate);
+      if (status === 'Absent') rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', assessmentTimestamp]);
+      else scores.forEach(s => {
+        const score = parseInt(s.score, 10);
+        if (score >= 1 && score <= 5) rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, score, 'Present', assessmentTimestamp]);
+      });
     });
     const keptRows = allData.slice(1).filter(row => !toDelete.has(`${row[1]}|${row[2]}|${row[4]}`));
     const output = [header].concat(keptRows, rows);
@@ -765,10 +823,11 @@ function saveOrUpdateStudents(token, students, schoolId) {
   if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy, please try again.' };
   try {
     const sheet = SS.getSheetByName(SHEETS.STUDENTS);
+    ensureStudentGenderColumn_(sheet);
     const all = sheet.getDataRange().getValues();
     const headers = all.shift();
-    const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class');
-    if ([idCol, nameCol, classCol].includes(-1)) throw new Error('Required column missing in Students sheet.');
+    const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class'), genderCol = headers.indexOf('Gender');
+    if ([idCol, nameCol, classCol, genderCol].includes(-1)) throw new Error('Required column missing in Students sheet.');
     const idToIndex = {};
     all.forEach((row, i) => { if (row[idCol]) idToIndex[row[idCol]] = i; });
     const ts = new Date();
@@ -778,12 +837,14 @@ function saveOrUpdateStudents(token, students, schoolId) {
         if (all[rowIndex][2] != schoolId) throw new Error('A student row does not belong to the selected school.');
         all[rowIndex][nameCol] = s.studentName;
         all[rowIndex][classCol] = s.class;
+        all[rowIndex][genderCol] = s.gender || '';
       } else {
         const row = new Array(headers.length).fill('');
         row[idCol] = 'STU-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
         row[nameCol] = s.studentName;
         row[2] = schoolId;
         row[classCol] = s.class;
+        row[genderCol] = s.gender || '';
         if (headers.length > 4) row[4] = ts;
         all.push(row);
       }

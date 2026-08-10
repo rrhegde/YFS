@@ -50,13 +50,9 @@
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <a href="#" class="d-flex align-items-center text-decoration-none" onclick="goHome(); return false;">
-        <div class="logo-container file-input-wrapper">
-          <img id="sidebarLogo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' fill='%232563eb' viewBox='0 0 16 16'%3E%3Cpath d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z'/%3E%3C/svg%3E" class="logo-img" alt="Logo" title="Click to upload logo">
-          <input type="file" id="logoFileInput" accept="image/*" style="display:none;">
-        </div>
         <div>
-          <div class="sidebar-brand">Spoken English</div>
-          <div class="sidebar-subtitle">Portal</div>
+          <div class="sidebar-brand">Spoken English Portal</div>
+          <!-- <div class="sidebar-subtitle">Portal</div> -->
         </div>
       </a>
     </div>
@@ -69,6 +65,9 @@
       </a>
       <a href="#" class="list-group-item list-group-item-action" onclick="loadAssessmentView(); closeMobileNav(); return false;" id="nav-assessment">
         <i class="bi bi-card-checklist me-2"></i> Assessment
+      </a>
+      <a href="#" class="list-group-item list-group-item-action" onclick="handleLogout(); closeMobileNav(); return false;" id="nav-logout">
+        <i class="bi bi-box-arrow-right me-2"></i> Logout
       </a>
     </div>
     <div class="p-3 rounded m-2" id="sidebar-user" style="display:none; position:absolute; bottom:20px; width:calc(100% - 1rem);">
@@ -219,17 +218,17 @@
         <div class="card shadow-sm border-0">
           <div class="card-body p-4">
             <div class="row g-3" id="assessment-setup">
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label fw-semibold">School</label>
                 <select id="schoolSelect" class="form-select"></select>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="form-label fw-semibold">Class</label>
                 <select id="classSelect" class="form-select">
                   <option value="">--Select Class--</option>
                 </select>
               </div>
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="form-label fw-semibold">Assessment Type</label>
                 <select id="assessmentTypeSelect" class="form-select">
                   <option value="">--Select Type--</option>
@@ -238,7 +237,11 @@
                   <option value="Endline">Endline</option>
                 </select>
               </div>
-              <div class="col-md-1 d-flex align-items-end">
+              <div class="col-md-2">
+                <label class="form-label fw-semibold">Assessment Date</label>
+                <input id="assessmentDateInput" type="date" class="form-control" />
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
                 <button class="btn btn-primary w-100" onclick="loadStudentGrid(this)">
                   <i class="bi bi-arrow-repeat me-2"></i>Load
                 </button>
@@ -266,18 +269,18 @@
       <div id="manageView" class="view" style="display:none;">
         <div class="mb-4">
           <h1 style="font-weight: 700; font-size: 2.2rem; color: var(--text-primary); margin-bottom: 0.5rem;">Management</h1>
-          <p class="text-muted mb-0">Manage schools, volunteers, mappings, and student data</p>
+          <p class="text-muted mb-0" id="manageSubtitle">Manage schools, volunteers, mappings, and student data</p>
         </div>
         <div class="card shadow-sm border-0">
           <div class="card-header bg-white border-bottom">
             <ul class="nav nav-tabs card-header-tabs" id="manageTabs">
-              <li class="nav-item">
+              <li class="nav-item" id="nav-tab-school">
                 <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-add-school" id="tab-btn-school">
                   <i class="bi bi-building-add me-1"></i>Add School
                 </button>
               </li>
               <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-manage-students" id="tab-btn-students">
                   <i class="bi bi-person-lines-fill me-1"></i>Manage Students
                 </button>
               </li>
@@ -398,7 +401,7 @@
                   <div class="table-responsive">
                     <table class="table table-bordered align-middle">
                       <thead class="table-light">
-                        <tr><th style="width:55%">Student Name</th><th>Class</th></tr>
+                        <tr><th style="width:42%">Student Name</th><th>Class</th><th>Gender</th><th class="text-center">Del</th></tr>
                       </thead>
                       <tbody id="manageStudentTableBody"></tbody>
                     </table>
@@ -537,22 +540,22 @@
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  GLOBAL STATE
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let currentUser = null;
-let sessionToken = '<?= sessionToken ?>' || sessionStorage.getItem('yfsSessionToken') || '';
-let bootstrappedUser = <?!= userJson ?> || JSON.parse(sessionStorage.getItem('yfsSessionUser') || 'null');
-let kpiMaster = [];
-let studentsList = [];
-let geoData = { regions: [], chapters: {} };
-let mgmtData = { schools: [], volunteers: [], mappings: [] };
-let assessmentSchools = [];
-let assessmentViewLoaded = false;
-let managementViewLoaded = false;
-let assessmentClassStudentsBySchool = {};
+var currentUser = null;
+var sessionToken = '<?= sessionToken ?>' || sessionStorage.getItem('yfsSessionToken') || '';
+var bootstrappedUser = <?!= userJson ?> || JSON.parse(sessionStorage.getItem('yfsSessionUser') || 'null');
+var kpiMaster = [];
+var studentsList = [];
+var geoData = { regions: [], chapters: {} };
+var mgmtData = { schools: [], volunteers: [], mappings: [] };
+var assessmentSchools = [];
+var assessmentViewLoaded = false;
+var managementViewLoaded = false;
+var assessmentClassStudentsBySchool = {};
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CONFIRMATION MODAL
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-let confirmModalCallback = null;
+var confirmModalCallback = null;
 
 const CACHE_VERSION = '1.0';
 
@@ -711,50 +714,9 @@ function showToast(message, type = 'success', duration = 4000) {
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  LOGO UPLOAD
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-function setupLogoUpload() {
-  const logoImg = document.getElementById('sidebarLogo');
-  const fileInput = document.getElementById('logoFileInput');
-  
-  // Click logo to upload
-  logoImg.addEventListener('click', () => fileInput.click());
-  
-  // Handle file selection
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const logoData = event.target.result;
-        // Save to localStorage
-        localStorage.setItem('appLogo', logoData);
-        // Update display
-        logoImg.src = logoData;
-        logoImg.title = 'Click to change logo';
-        showToast('Logo uploaded successfully!', 'success');
-      };
-      reader.readAsDataURL(file);
-    }
-  });
-}
-
-function loadStoredLogo() {
-  const storedLogo = localStorage.getItem('appLogo');
-  if (storedLogo) {
-    const logoImg = document.getElementById('sidebarLogo');
-    logoImg.src = storedLogo;
-    logoImg.title = 'Click to change logo';
-  }
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  INIT & AUTH
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 window.addEventListener('load', function() {
-  setupLogoUpload();
-  loadStoredLogo();
-  
   // Close modal when clicking outside
   document.getElementById('confirmModalOverlay').addEventListener('click', (e) => {
     if (e.target === document.getElementById('confirmModalOverlay')) {
@@ -808,8 +770,13 @@ function initializeApp(user) {
   }
   document.getElementById('sidebar-user').style.display = 'block';
   setupUIBasedOnRole(user.role);
+  const lastView = sessionStorage.getItem('yfsLastView');
   if (user.role === 'Volunteer') {
     loadManagementView();
+  } else if (lastView === 'manageView') {
+    loadManagementView();
+  } else if (lastView === 'assessmentView') {
+    loadAssessmentView();
   } else {
     switchView('dashboardView');
     loadDashboardStats();
@@ -825,7 +792,12 @@ function setupUIBasedOnRole(role) {
 function switchView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
   const t = document.getElementById(viewId);
-  if (t) t.style.display = 'block';
+  if (t) {
+    t.style.display = 'block';
+    if (viewId === 'dashboardView' || viewId === 'manageView' || viewId === 'assessmentView') {
+      sessionStorage.setItem('yfsLastView', viewId);
+    }
+  }
 }
 
 function toggleMobileNav() {
@@ -846,6 +818,34 @@ function goHome() {
   if (currentUser && currentUser.role === 'Volunteer') loadManagementView();
   else switchView('dashboardView');
   closeMobileNav();
+}
+
+function handleLogout() {
+  const token = sessionToken;
+  sessionStorage.removeItem('yfsSessionToken');
+  sessionStorage.removeItem('yfsSessionUser');
+  sessionStorage.removeItem('yfsLastView');
+  showLoading('Logging out...');
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      if (res && res.url) {
+        window.top.location.href = res.url;
+        return;
+      }
+      if (res && res.html) {
+        document.open();
+        document.write(res.html);
+        document.close();
+        return;
+      }
+      window.top.location.reload();
+    })
+    .withFailureHandler(() => {
+      hideLoading();
+      window.top.location.reload();
+    })
+    .logoutAndGetLoginPage(token);
 }
 
 function loadDashboardStats() {
@@ -916,6 +916,7 @@ function loadAssessmentView(forceReset = false) {
   document.getElementById('schoolSelect').value = '';
   document.getElementById('classSelect').innerHTML = '<option value="">--Select Class--</option>';
   document.getElementById('assessmentTypeSelect').value = '';
+  document.getElementById('assessmentDateInput').value = '';
 
   if (assessmentViewLoaded) {
     switchView('assessmentView');
@@ -1027,6 +1028,10 @@ async function loadStudentGrid(btn) {
     const kpis = data.kpis || [];
     kpiMaster = kpis;
     setCachedKpis(kpis);
+
+    if (data.assessmentDate) {
+      document.getElementById('assessmentDateInput').value = data.assessmentDate;
+    }
     
     renderAssessmentGrid(students, kpis, data.existingDataMap || {});
     document.getElementById('student-grid-container').style.display = 'block';
@@ -1061,10 +1066,10 @@ function renderAssessmentGrid(students, kpis, existingDataMap = {}) {
         <td>${student.studentName} <small class="text-muted">(Cls ${student.class})</small></td>`;
 
     kpis.forEach(kpi => {
-        const value = scoresByKpi[kpi.id] || '';
+        const value = scoresByKpi[kpi.id] != null ? scoresByKpi[kpi.id] : '';
         // Disable score inputs if the student was marked absent
         const disabled = isAbsent ? 'disabled' : '';
-        bodyHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${kpi.id}" min="1" max="5" value="${value}" style="width:65px;margin:auto;" ${disabled}></td>`;
+        bodyHtml += `<td><input type="number" class="form-control kpi-score text-center" data-kpiid="${kpi.id}" min="1" max="5" value="${value}" style="width:65px;margin:auto;" ${disabled} oninput="enforceScoreLimit(this)" onblur="enforceScoreLimit(this)"></td>`;
     });
 
     // Conditionally set the toggle and label based on the 'isAbsent' status
@@ -1092,14 +1097,21 @@ function toggleAttendance(checkbox) {
 function handleSaveAssessments(btn) {
   const schoolId = document.getElementById('schoolSelect').value;
   const assessmentType = document.getElementById('assessmentTypeSelect').value;
+  const assessmentDate = document.getElementById('assessmentDateInput').value;
   const payload = [];
+
+  if (!assessmentDate) {
+    showToast('Please select an assessment date before saving.', 'warning');
+    return;
+  }
 
   document.querySelectorAll('#assessment-grid-body tr').forEach(row => {
     const isPresent = row.querySelector('.attendance-toggle').checked;
-    const item = { studentId: row.dataset.studentid, schoolId, assessmentType, status: isPresent ? 'Present' : 'Absent', scores: [] };
+    const item = { studentId: row.dataset.studentid, schoolId, assessmentType, assessmentDate, status: isPresent ? 'Present' : 'Absent', scores: [] };
     if (isPresent) {
       row.querySelectorAll('.kpi-score').forEach(inp => {
-        if (inp.value) item.scores.push({ kpiId: inp.dataset.kpiid, score: parseInt(inp.value) });
+        enforceScoreLimit(inp);
+        if (inp.value) item.scores.push({ kpiId: inp.dataset.kpiid, score: parseInt(inp.value, 10) });
       });
     }
     payload.push(item);
@@ -1135,6 +1147,7 @@ function handleSaveAssessments(btn) {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function loadManagementView() {
   if (managementViewLoaded) {
+    updateManagementAccessUI(currentUser);
     switchView('manageView');
     return;
   }
@@ -1163,10 +1176,7 @@ function setupManagementUI(data) {
   managementViewLoaded = true;
   setCachedGeoData(geo);
 
-  // Show/hide tabs based on role
-  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor' || user.role === 'Coordinator';
-  document.getElementById('nav-tab-volunteer').style.display = canManageVols ? '' : 'none';
-  document.getElementById('nav-tab-map').style.display = canManageVols ? '' : 'none';
+  updateManagementAccessUI(user);
 
   // Setup geo dropdowns
   setupGeoDropdowns(geo, user);
@@ -1210,6 +1220,35 @@ function setupManagementUI(data) {
   document.getElementById('manage-students-container').style.display = 'none';
 
   switchView('manageView');
+}
+
+function setManageActiveTab(tabButtonId) {
+  const button = document.getElementById(tabButtonId);
+  if (!button) return;
+
+  document.querySelectorAll('#manageTabs .nav-link').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('#manageView .tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
+
+  button.classList.add('active');
+  const pane = document.querySelector(button.dataset.bsTarget);
+  if (pane) pane.classList.add('show', 'active');
+}
+
+function updateManagementAccessUI(user) {
+  if (!user) return;
+
+  const isVolunteer = user.role === 'Volunteer';
+  const canManageVols = user.role === 'Admin' || user.role === 'Supervisor' || user.role === 'Coordinator';
+  document.getElementById('nav-tab-school').style.display = isVolunteer ? 'none' : '';
+  document.getElementById('nav-tab-volunteer').style.display = canManageVols ? '' : 'none';
+  document.getElementById('nav-tab-map').style.display = canManageVols ? '' : 'none';
+  document.getElementById('manageSubtitle').textContent = isVolunteer
+    ? 'Manage student data for your assigned schools'
+    : 'Manage schools, volunteers, mappings, and student data';
+
+  if (isVolunteer && document.getElementById('tab-btn-school').classList.contains('active')) {
+    setManageActiveTab('tab-btn-students');
+  }
 }
 
 function setupGeoDropdowns(geo, user) {
@@ -1787,12 +1826,20 @@ function loadManagedStudents() {
 function renderManagedStudentGrid(students) {
   const body = document.getElementById('manageStudentTableBody');
   if (!students.length) {
-    body.innerHTML = `<tr id="no-managed-students-row"><td colspan="3" class="text-center text-muted p-3">No students found. Use "Add Rows" to begin.</td></tr>`;
+    body.innerHTML = `<tr id="no-managed-students-row"><td colspan="4" class="text-center text-muted p-3">No students found. Use "Add Rows" to begin.</td></tr>`;
     return;
   }
   body.innerHTML = students.map(s => `<tr data-id="${escHtml(s.studentId)}">
       <td><input class="form-control form-control-sm student-name" value="${escHtml(s.studentName)}" placeholder="Student name"></td>
       <td><input class="form-control form-control-sm student-class" value="${escHtml(s.class || '')}" placeholder="e.g. 7"></td>
+      <td>
+        <select class="form-select form-select-sm student-gender">
+          <option value="">--Select--</option>
+          <option value="Female" ${s.gender === 'Female' ? 'selected' : ''}>Female</option>
+          <option value="Male" ${s.gender === 'Male' ? 'selected' : ''}>Male</option>
+          <option value="Other" ${s.gender === 'Other' ? 'selected' : ''}>Other</option>
+        </select>
+      </td>
       <td class="text-center">
         <button class="btn btn-sm btn-outline-danger" onclick="handleDeleteStudent('${escHtml(s.studentId)}', this)" title="Delete student">
           <i class="bi bi-trash"></i>
@@ -1810,7 +1857,19 @@ function addStudentRows() {
   if (placeholder) placeholder.remove();
   let rowsHtml = '';
   for (let i = 0; i < count; i++) {
-    rowsHtml += `<tr data-id=""><td><input class="form-control form-control-sm student-name" placeholder="Student name"></td><td><input class="form-control form-control-sm student-class" placeholder="e.g. 7"></td><td class="text-center"></td></tr>`;
+    rowsHtml += `<tr data-id="">
+      <td><input class="form-control form-control-sm student-name" placeholder="Student name"></td>
+      <td><input class="form-control form-control-sm student-class" placeholder="e.g. 7"></td>
+      <td>
+        <select class="form-select form-select-sm student-gender">
+          <option value="">--Select--</option>
+          <option value="Female">Female</option>
+          <option value="Male">Male</option>
+          <option value="Other">Other</option>
+        </select>
+      </td>
+      <td class="text-center"></td>
+    </tr>`;
   }
   body.insertAdjacentHTML('beforeend', rowsHtml);
   countInput.value = '';
@@ -1878,7 +1937,14 @@ function saveManagedStudents(btn) {
   rows.forEach(row => {
     if (row.id === 'no-managed-students-row') return;
     const name = row.querySelector('.student-name').value.trim();
-    if (name) toSave.push({ studentId: row.dataset.id || '', studentName: name, class: row.querySelector('.student-class').value.trim() });
+    if (name) {
+      toSave.push({
+        studentId: row.dataset.id || '',
+        studentName: name,
+        class: row.querySelector('.student-class').value.trim(),
+        gender: row.querySelector('.student-gender').value
+      });
+    }
   });
 
   if (!toSave.length) { showToast('No student data to save.', 'warning'); return; }
@@ -1927,6 +1993,20 @@ function setupLiveSearch(searchId, selectId) {
 
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function enforceScoreLimit(input) {
+  if (input.value === '') return;
+  let value = parseInt(input.value, 10);
+  if (Number.isNaN(value)) {
+    input.value = '';
+  } else if (value < 1) {
+    input.value = 1;
+  } else if (value > 5) {
+    input.value = 5;
+  } else {
+    input.value = value;
+  }
 }
 
 function escJsString(str) {
