@@ -29,18 +29,26 @@ function getLoginPageHtml() {
 
 function verifyUserCredentials(email, pin) {
   try {
+    Logger.log('verifyUserCredentials called. email=' + email + ', pinLength=' + (pin ? String(pin).length : 0));
     email = normalizeEmail_(email);
     pin = String(pin || '').trim();
-    if (!email || !pin) return { success: false, message: 'Email and PIN are required.' };
+    if (!email || !pin) {
+      Logger.log('verifyUserCredentials: missing email or pin. email=' + (email || '(empty)'));
+      return { success: false, message: 'Email and PIN are required.' };
+    }
 
     let user = findUserByEmailAndPin_(email, pin);
-    if (!user) return { success: false, message: 'Invalid email or PIN.' };
+    if (!user) {
+      Logger.log('verifyUserCredentials: invalid credentials for ' + email);
+      return { success: false, message: 'Invalid email or PIN.' };
+    }
 
     user = attachScope_(user);
     const token = createSession_(user);
+    Logger.log('verifyUserCredentials: success for ' + email + ' tokenPrefix=' + (token ? token.substring(0,8) : '(none)'));
     return { success: true, token, user };
   } catch (e) {
-    Logger.log(e);
+    Logger.log('verifyUserCredentials: exception for ' + email + ' - ' + e);
     return { success: false, message: e.message };
   }
 }
@@ -54,6 +62,7 @@ function loadMainApp(token) {
 }
 
 function loginAndLoadApp(email, pin) {
+  Logger.log('loginAndLoadApp called. email=' + (email||'(empty)') + ', pinLength=' + (pin ? String(pin).length : 0));
   const auth = verifyUserCredentials(email, pin);
   if (!auth.success) return auth;
   return Object.assign(auth, { html: loadMainApp(auth.token) });
@@ -73,15 +82,25 @@ function verifyVolunteerPin(pin) {
 
 function createSession_(user) {
   const token = Utilities.getUuid() + '-' + Utilities.getUuid();
-  CacheService.getScriptCache().put('session:' + token, JSON.stringify(user), SESSION_TTL_SECONDS);
+  try {
+    CacheService.getScriptCache().put('session:' + token, JSON.stringify(user), SESSION_TTL_SECONDS);
+    Logger.log('createSession_: session created for ' + (user && user.email ? user.email : '(unknown)') + ' tokenPrefix=' + token.substring(0,8));
+  } catch (e) {
+    Logger.log('createSession_: cache put failed for ' + (user && user.email ? user.email : '(unknown)') + ' - ' + e);
+  }
   return token;
 }
 
 function getSessionUser(token) {
+  Logger.log('getSessionUser called. tokenPresent=' + (!!token));
   if (!token) throw new Error('Your session has expired. Please log in again.');
   const raw = CacheService.getScriptCache().get('session:' + token);
-  if (!raw) throw new Error('Your session has expired. Please log in again.');
+  if (!raw) {
+    Logger.log('getSessionUser: no cache found for tokenPrefix=' + token.substring(0,8));
+    throw new Error('Your session has expired. Please log in again.');
+  }
   const user = JSON.parse(raw);
+  Logger.log('getSessionUser: retrieved user=' + (user && user.email ? user.email : '(unknown)'));
   return user.scope ? user : attachScope_(user);
 }
 
@@ -90,7 +109,15 @@ function requireUser_(token) {
 }
 
 function logoutAndGetLoginPage(token) {
-  if (token) removeCached_('session:' + token);
+  Logger.log('logoutAndGetLoginPage called. tokenPresent=' + (!!token));
+  if (token) {
+    try {
+      removeCached_('session:' + token);
+      Logger.log('logoutAndGetLoginPage: removed session for tokenPrefix=' + token.substring(0,8));
+    } catch (e) {
+      Logger.log('logoutAndGetLoginPage: error removing session - ' + e);
+    }
+  }
   return { success: true, url: getAppUrl_(), html: getLoginPageHtml() };
 }
 
@@ -123,8 +150,18 @@ function removeCached_(key) {
 function getCachedSheetValues_(sheetName) {
   const key = 'sheet:' + sheetName;
   const cached = getCachedJson_(key);
-  if (cached) return cached;
-  const values = SS.getSheetByName(sheetName).getDataRange().getValues();
+  Logger.log('getCachedSheetValues_: key=' + key + ' cacheHit=' + (!!cached));
+  if (cached) {
+    Logger.log('getCachedSheetValues_: cache hit for ' + sheetName + ' rows=' + (cached ? cached.length : 0));
+    return cached;
+  }
+  const sheet = SS.getSheetByName(sheetName);
+  if (!sheet) {
+    Logger.log('getCachedSheetValues_: sheet not found: ' + sheetName);
+    return [];
+  }
+  const values = sheet.getDataRange().getValues();
+  Logger.log('getCachedSheetValues_: loaded ' + values.length + ' rows from sheet ' + sheetName);
   putCachedJson_(key, values, DATA_CACHE_TTL_SECONDS);
   return values;
 }
@@ -152,12 +189,14 @@ function rowValue_(row, index) {
 }
 
 function findUserByEmailAndPin_(email, pin) {
+  Logger.log('findUserByEmailAndPin_: searching for ' + email);
   const usersData = getCachedSheetValues_(SHEETS.USERS);
   for (let i = 1; i < usersData.length; i++) {
     const rowEmail = normalizeEmail_(usersData[i][0]);
     const rowRole = rowValue_(usersData[i], 1);
     const rowPin = rowValue_(usersData[i], 2);
     if (rowEmail === email && rowPin === pin && ['Admin', 'Supervisor', 'Coordinator'].includes(rowRole)) {
+      Logger.log('findUserByEmailAndPin_: found user in USERS at row=' + (i+1) + ' role=' + rowRole);
       return {
         email: rowValue_(usersData[i], 0),
         role: rowRole,
@@ -173,6 +212,7 @@ function findUserByEmailAndPin_(email, pin) {
     const rowEmail = normalizeEmail_(volData[i][2]);
     const rowPin = rowValue_(volData[i], 3);
     if (rowEmail === email && rowPin === pin) {
+      Logger.log('findUserByEmailAndPin_: found volunteer in VOLUNTEERS at row=' + (i+1));
       return {
         email: rowValue_(volData[i], 2),
         role: 'Volunteer',
@@ -182,6 +222,7 @@ function findUserByEmailAndPin_(email, pin) {
       };
     }
   }
+  Logger.log('findUserByEmailAndPin_: no match for ' + email);
   return null;
 }
 
@@ -956,6 +997,7 @@ function getDashboardStatsForUser(token) {
 
 function getAppData(sessionToken) {
   try {
+    Logger.log('getAppData called. tokenPresent=' + (!!sessionToken) + (sessionToken ? ' tokenPrefix=' + sessionToken.substring(0,8) : ''));
     const user = getSessionUser(sessionToken);
     const permissions = user.permissions || {
       canManageSchools: false,
@@ -995,6 +1037,7 @@ function getAppData(sessionToken) {
     
     // Get dashboard stats
     const dashboard = getDashboardStats(user);
+    Logger.log('getAppData: user=' + (user && user.email ? user.email : '(unknown)') + ' schools=' + schoolsRaw.length + ' volunteers=' + volRaw.length + ' mappings=' + mappingRaw.length);
     
     return {
       success: true,

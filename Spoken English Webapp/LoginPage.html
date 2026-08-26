@@ -73,6 +73,7 @@
 
   function resumeExistingSession() {
     const token = sessionStorage.getItem('yfsSessionToken');
+    console.log('resumeExistingSession: tokenPresent=' + (!!token) + (token ? ' tokenPrefix=' + token.substring(0,8) : ''));
     if (!token) return;
 
     const loginBtn = document.getElementById('loginBtn');
@@ -85,7 +86,8 @@
         document.write(html);
         document.close();
       })
-      .withFailureHandler(() => {
+      .withFailureHandler((err) => {
+        console.error('resumeExistingSession failed', err);
         sessionStorage.removeItem('yfsSessionToken');
         sessionStorage.removeItem('yfsSessionUser');
         sessionStorage.removeItem('yfsLastView');
@@ -106,8 +108,11 @@
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Verifying...';
 
+    console.log('handleLogin: captured email=' + email + ', pinLength=' + (pin ? pin.length : 0));
+
     google.script.run
       .withSuccessHandler(response => {
+        console.log('handleLogin success response:', response);
         if (response.success) {
           sessionStorage.setItem('yfsSessionToken', response.token);
           sessionStorage.setItem('yfsSessionUser', JSON.stringify(response.user));
@@ -123,7 +128,8 @@
         }
       })
       .withFailureHandler(err => {
-        errorDiv.textContent = 'An error occurred: ' + err.message;
+        console.error('handleLogin failure:', err);
+        errorDiv.textContent = 'An error occurred: ' + (err && err.message);
         errorDiv.style.display = 'block';
         loginBtn.disabled = false;
         loginBtn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Login';

@@ -584,6 +584,8 @@ var assessmentSchools = [];
 var assessmentViewLoaded = false;
 var managementViewLoaded = false;
 var assessmentClassStudentsBySchool = {};
+console.log('bootstrap: sessionTokenPresent=' + (!!sessionToken) + (sessionToken ? ' tokenPrefix=' + sessionToken.substring(0,8) : ''));
+console.log('bootstrap: bootstrappedUser=', bootstrappedUser ? { email: bootstrappedUser.email, role: bootstrappedUser.role } : null);
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CONFIRMATION MODAL
@@ -855,12 +857,14 @@ function goHome() {
 
 function handleLogout() {
   const token = sessionToken;
+  console.log('handleLogout: tokenPresent=' + (!!token) + (token ? ' tokenPrefix=' + token.substring(0,8) : ''));
   sessionStorage.removeItem('yfsSessionToken');
   sessionStorage.removeItem('yfsSessionUser');
   sessionStorage.removeItem('yfsLastView');
   showLoading('Logging out...');
   google.script.run
     .withSuccessHandler(res => {
+      console.log('handleLogout success response:', res);
       hideLoading();
       if (res && res.url) {
         window.top.location.href = res.url;
@@ -874,7 +878,8 @@ function handleLogout() {
       }
       window.top.location.reload();
     })
-    .withFailureHandler(() => {
+    .withFailureHandler(err => {
+      console.error('handleLogout failure:', err);
       hideLoading();
       window.top.location.reload();
     })
