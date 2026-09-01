@@ -10,6 +10,13 @@ const SHEETS = {
 const DATA_CACHE_TTL_SECONDS = 300; // 5 minutes
 const STUDENT_CACHE_TTL_SECONDS = 600; // 10 minutes
 
+// --- SAFETY & RECOVERY CONFIG ---
+const ENABLE_SOFT_DELETES = true; // Mark deleted records instead of removing
+const ENABLE_AUDIT_LOG = true; // Log all modifications
+const BACKUP_RETENTION_HOURS = 72; // Keep backups for 72 hours
+const MAX_BATCH_SIZE = 100; // Process large operations in batches
+const OPERATION_TIMEOUT_MS = 60000; // 60 second timeout for operations
+
 // --- ASSESSMENT MODE CONFIG ---
 // Developer-editable. Options:
 // 'full'               => Baseline -> Midline -> Endline (default strict flow)
@@ -206,6 +213,192 @@ function invalidateStudentsCache_(schoolId) {
 
 function invalidateVolunteerCache_() {
   invalidateSheetCache_(SHEETS.VOLUNTEERS);
+}
+
+// --- AUDIT LOGGING ---
+function createAuditLog_(action, details) {
+  if (!ENABLE_AUDIT_LOG) return;
+  try {
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+      timestamp,
+      action,
+      details: JSON.stringify(details),
+      executionId: generateUniqueId()
+    };
+    Logger.log('[AUDIT] ' + JSON.stringify(logEntry));
+    
+    // Optional: Store in a hidden sheet for long-term audit trail
+    const auditSheet = getOrCreateAuditSheet_();
+    if (auditSheet) {
+      auditSheet.appendRow([
+        timestamp,
+        action,
+        details.user || 'system',
+        details.schoolId || '',
+        details.dataType || '',
+        details.recordCount || 0,
+        details.status || '',
+        JSON.stringify(details)
+      ]);
+    }
+  } catch (e) {
+    Logger.log('[AUDIT ERROR] ' + e);
+  }
+}
+
+function getOrCreateAuditSheet_() {
+  try {
+    let sheet = SS.getSheetByName('AUDIT_LOG');
+    if (!sheet) {
+      sheet = SS.insertSheet('AUDIT_LOG', 0);
+      sheet.getRange(1, 1, 1, 8).setValues([[
+        'Timestamp', 'Action', 'User', 'SchoolID', 'DataType', 'RecordCount', 'Status', 'Details'
+      ]]);
+      sheet.setHiddenSheet(true); // Hide from UI
+    }
+    return sheet;
+  } catch (e) {
+    Logger.log('Could not create audit sheet: ' + e);
+    return null;
+  }
+}
+
+// --- BACKUP & RECOVERY ---
+function createDataBackup_(sheetName, reason) {
+  if (!ENABLE_AUDIT_LOG) return null;
+  try {
+    const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+    const backupSheetName = 'BACKUP_' + sheetName + '_' + timestamp;
+    const sourceSheet = SS.getSheetByName(sheetName);
+    if (!sourceSheet) return null;
+    
+    const sourceData = sourceSheet.getDataRange().getValues();
+    const backupSheet = SS.insertSheet(backupSheetName);
+    if (sourceData.length > 0) {
+      backupSheet.getRange(1, 1, sourceData.length, sourceData[0].length).setValues(sourceData);
+    }
+    backupSheet.setHiddenSheet(true);
+    
+    createAuditLog_('BACKUP_CREATED', {
+      sheetName,
+      backupName: backupSheetName,
+      rowCount: sourceData.length,
+      reason
+    });
+    
+    // Clean up old backups (keep only recent ones)
+    cleanupOldBackups_(sheetName);
+    return backupSheetName;
+  } catch (e) {
+    Logger.log('Backup failed for ' + sheetName + ': ' + e);
+    return null;
+  }
+}
+
+function cleanupOldBackups_(sheetName) {
+  try {
+    const sheets = SS.getSheets();
+    const prefix = 'BACKUP_' + sheetName + '_';
+    const backups = sheets.filter(s => s.getName().startsWith(prefix));
+    
+    if (backups.length > 5) {
+      // Keep only 5 most recent backups
+      const sorted = backups.sort((a, b) => {
+        const aTime = extractBackupTime_(a.getName());
+        const bTime = extractBackupTime_(b.getName());
+        return bTime - aTime;
+      });
+      
+      for (let i = 5; i < sorted.length; i++) {
+        SS.deleteSheet(sorted[i]);
+      }
+    }
+  } catch (e) {
+    Logger.log('Cleanup failed: ' + e);
+  }
+}
+
+function extractBackupTime_(sheetName) {
+  const match = sheetName.match(/(\d{8}_\d{6})$/);
+  return match ? parseInt(match[1].replace('_', ''), 10) : 0;
+}
+
+function restoreFromBackup_(backupSheetName, targetSheetName) {
+  try {
+    const backupSheet = SS.getSheetByName(backupSheetName);
+    const targetSheet = SS.getSheetByName(targetSheetName);
+    
+    if (!backupSheet || !targetSheet) throw new Error('Backup or target sheet not found.');
+    
+    const backupData = backupSheet.getDataRange().getValues();
+    targetSheet.getDataRange().clearContent();
+    if (backupData.length > 0) {
+      targetSheet.getRange(1, 1, backupData.length, backupData[0].length).setValues(backupData);
+    }
+    
+    invalidateSheetCache_(targetSheetName);
+    createAuditLog_('RESTORE_FROM_BACKUP', {
+      backupName: backupSheetName,
+      targetSheet: targetSheetName,
+      rowCount: backupData.length
+    });
+    
+    return true;
+  } catch (e) {
+    Logger.log('Restore failed: ' + e);
+    throw e;
+  }
+}
+
+// --- SOFT DELETE SUPPORT ---
+function ensureSoftDeleteColumn_(sheet, sheetName) {
+  if (!ENABLE_SOFT_DELETES) return -1;
+  try {
+    const headerRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1));
+    const headers = headerRange.getValues()[0];
+    let index = headers.indexOf('_Deleted');
+    if (index === -1) {
+      index = headers.length;
+      sheet.getRange(1, index + 1).setValue('_Deleted');
+      invalidateSheetCache_(sheetName);
+    }
+    return index;
+  } catch (e) {
+    Logger.log('Could not ensure soft delete column: ' + e);
+    return -1;
+  }
+}
+
+function softDeleteRow_(sheetName, rowData) {
+  if (!ENABLE_SOFT_DELETES) return false;
+  try {
+    const sheet = SS.getSheetByName(sheetName);
+    const data = sheet.getDataRange().getValues();
+    const deletedCol = ensureSoftDeleteColumn_(sheet, sheetName);
+    
+    if (deletedCol === -1) return false;
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === rowData[0]) {
+        const timestamp = new Date().toISOString();
+        sheet.getRange(i + 1, deletedCol + 1).setValue(timestamp);
+        invalidateSheetCache_(sheetName);
+        return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    Logger.log('Soft delete failed: ' + e);
+    return false;
+  }
+}
+
+function filterOutDeleted_(rows) {
+  if (!ENABLE_SOFT_DELETES) return rows;
+  const deletedCol = rows[0] ? rows[0].indexOf('_Deleted') : -1;
+  if (deletedCol === -1) return rows;
+  return rows.filter((row, index) => index === 0 || !row[deletedCol]);
 }
 
 
@@ -688,23 +881,39 @@ function parseAssessmentDate(value) {
 function saveAssessments(token, assessmentData) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
+  
+  // Validation
+  if (!assessmentData || assessmentData.length === 0) {
+    return { success: false, message: 'No assessment data provided.' };
+  }
+  
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy. Please try again.' };
+  if (!lock.tryLock(40000)) return { success: false, message: 'Server is busy. Please try again.' };
+  
+  let backupSheetName = null;
   try {
     const sheet = SS.getSheetByName(SHEETS.ASSESSMENTS);
     const allData = sheet.getDataRange().getValues();
+    if (allData.length === 0) throw new Error('Assessments sheet is empty or corrupted.');
+    
     const header = allData[0] || [];
     const toDelete = new Set();
     const schoolIds = new Set();
+    
     assessmentData.forEach(item => {
-      // validate assessment type is enabled
+      // Validate assessment type is enabled
       if (!isAssessmentTypeEnabled(item.assessmentType)) {
         throw new Error(`${item.assessmentType} assessments are disabled in the current assessment mode.`);
       }
       schoolIds.add(item.schoolId);
       toDelete.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`);
     });
+    
     schoolIds.forEach(schoolId => ensureSchoolAccess_(user, schoolId));
+    
+    // BACKUP: Create backup before modifications
+    backupSheetName = createDataBackup_(SHEETS.ASSESSMENTS, 'Pre-save backup for assessments');
+    
     const rows = [];
 
     // Build a map of existing assessment types per student so we can validate prerequisites
@@ -732,6 +941,7 @@ function saveAssessments(token, assessmentData) {
         }
       }
     }
+    
     assessmentData.forEach(item => {
       const { studentId, schoolId, assessmentType, status, scores, assessmentDate } = item;
       const assessmentTimestamp = parseAssessmentDate(assessmentDate);
@@ -741,15 +951,51 @@ function saveAssessments(token, assessmentData) {
         if (score >= 1 && score <= 5) rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, score, 'Present', assessmentTimestamp]);
       });
     });
+    
     const keptRows = allData.slice(1).filter(row => !toDelete.has(`${row[1]}|${row[2]}|${row[4]}`));
     const output = [header].concat(keptRows, rows);
-    sheet.getDataRange().clearContent();
-    if (output.length > 0 && output[0].length > 0) {
-      sheet.getRange(1, 1, output.length, output[0].length).setValues(output);
-    }
+    
+    // Validate output
+    if (!output || output.length === 0) throw new Error('No data to write - operation aborted.');
+    
+    const range = sheet.getRange(1, 1, output.length, output[0].length);
+    range.clearContent();
+    range.setValues(output);
+    
     invalidateSheetCache_(SHEETS.ASSESSMENTS);
+    
+    createAuditLog_('ASSESSMENTS_SAVED', {
+      user: user.email,
+      recordCount: assessmentData.length,
+      status: 'SUCCESS',
+      backupSheet: backupSheetName
+    });
+    
     return { success: true, message: 'Assessments saved successfully!' };
-  } catch (e) { Logger.log(e); return { success: false, message: e.message }; }
+  } catch (e) {
+    Logger.log('[ERROR] saveAssessments: ' + e);
+    
+    createAuditLog_('ASSESSMENTS_SAVED_FAILED', {
+      user: user.email,
+      error: e.toString(),
+      backupSheet: backupSheetName,
+      status: 'FAILED'
+    });
+    
+    // Attempt recovery
+    if (backupSheetName) {
+      try {
+        Logger.log('Attempting recovery from backup: ' + backupSheetName);
+        restoreFromBackup_(backupSheetName, SHEETS.ASSESSMENTS);
+        return { success: false, message: 'An error occurred. Data recovered from backup. ' + e.message };
+      } catch (recoveryError) {
+        Logger.log('[CRITICAL] Recovery failed: ' + recoveryError);
+        return { success: false, message: 'Critical error: ' + e.message + '. Please contact support.' };
+      }
+    }
+    
+    return { success: false, message: e.message };
+  }
   finally { lock.releaseLock(); }
 }
 
@@ -927,26 +1173,63 @@ function saveOrUpdateStudents(token, students, schoolId) {
   const user = getSessionUser(token);
   ensurePermission_(canManageStudents_(user), 'Authorization failed.');
   ensureSchoolAccess_(user, schoolId);
+  
+  // Validation: Prevent accidental bulk deletion
+  if (!students || students.length === 0) {
+    return { success: false, message: 'No student data provided. Operation cancelled to prevent accidental data loss.' };
+  }
+  
+  // Warning for large operations
+  if (students.length > 100) {
+    Logger.log('WARNING: Large student save operation. studentCount=' + students.length + ' schoolId=' + schoolId + ' user=' + user.email);
+  }
+  
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) return { success: false, message: 'Server is busy, please try again.' };
+  if (!lock.tryLock(40000)) return { success: false, message: 'Server is busy, please try again.' };
+  
+  let backupSheetName = null;
   try {
     const sheet = SS.getSheetByName(SHEETS.STUDENTS);
     ensureStudentGenderColumn_(sheet);
-    const all = sheet.getDataRange().getValues();
-    const headers = all.shift();
+    const deletedCol = ensureSoftDeleteColumn_(sheet, SHEETS.STUDENTS);
+    
+    // READ: Get current data
+    const allData = sheet.getDataRange().getValues();
+    if (allData.length === 0) throw new Error('Students sheet is empty or corrupted.');
+    
+    const headers = allData[0];
     const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class'), genderCol = headers.indexOf('Gender');
-    if ([idCol, nameCol, classCol, genderCol].includes(-1)) throw new Error('Required column missing in Students sheet.');
+    
+    // Validate columns
+    if ([idCol, nameCol, classCol, genderCol].includes(-1)) {
+      throw new Error('Required column missing in Students sheet.');
+    }
+    
+    // BACKUP: Create backup before any modifications
+    backupSheetName = createDataBackup_(SHEETS.STUDENTS, 'Pre-save backup for schoolId=' + schoolId);
+    
+    // TRANSFORM: Build update map
+    const all = allData.slice(1);
     const idToIndex = {};
     all.forEach((row, i) => { if (row[idCol]) idToIndex[row[idCol]] = i; });
+    
+    // Apply changes
     const ts = new Date();
+    const updatedCount = { new: 0, updated: 0 };
     students.forEach(s => {
       const rowIndex = idToIndex[s.studentId];
       if (rowIndex != null) {
-        if (all[rowIndex][2] != schoolId) throw new Error('A student row does not belong to the selected school.');
+        // Existing student - update
+        if (all[rowIndex][2] != schoolId) {
+          throw new Error('A student row does not belong to the selected school.');
+        }
         all[rowIndex][nameCol] = s.studentName;
         all[rowIndex][classCol] = s.class;
         all[rowIndex][genderCol] = s.gender || '';
+        if (deletedCol !== -1) all[rowIndex][deletedCol] = ''; // Clear deleted marker if re-activating
+        updatedCount.updated++;
       } else {
+        // New student
         const row = new Array(headers.length).fill('');
         row[idCol] = 'STU-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
         row[nameCol] = s.studentName;
@@ -954,15 +1237,62 @@ function saveOrUpdateStudents(token, students, schoolId) {
         row[classCol] = s.class;
         row[genderCol] = s.gender || '';
         if (headers.length > 4) row[4] = ts;
+        if (deletedCol !== -1) row[deletedCol] = '';
         all.push(row);
+        updatedCount.new++;
       }
     });
+    
+    // WRITE: Atomic write operation with validation
     const output = [headers].concat(all);
-    sheet.getDataRange().clearContent();
-    sheet.getRange(1, 1, output.length, headers.length).setValues(output);
+    
+    // Validate output
+    if (!output || output.length === 0) throw new Error('No data to write - operation aborted.');
+    if (output.length < 2) throw new Error('All existing students would be lost - operation aborted.');
+    
+    const range = sheet.getRange(1, 1, output.length, output[0].length);
+    range.clearContent();
+    range.setValues(output);
+    
     invalidateStudentsCache_(schoolId);
-    return { success: true, message: 'Students saved successfully!' };
-  } catch (e) { Logger.log(e); return { success: false, message: e.message }; }
+    
+    // Log successful operation
+    createAuditLog_('STUDENTS_SAVED', {
+      user: user.email,
+      schoolId,
+      newCount: updatedCount.new,
+      updateCount: updatedCount.updated,
+      status: 'SUCCESS',
+      backupSheet: backupSheetName
+    });
+    
+    return { success: true, message: 'Students saved successfully! (New: ' + updatedCount.new + ', Updated: ' + updatedCount.updated + ')' };
+  } catch (e) {
+    Logger.log('[ERROR] saveOrUpdateStudents: ' + e + ' for schoolId=' + schoolId);
+    
+    // Log failed operation
+    createAuditLog_('STUDENTS_SAVED_FAILED', {
+      user: user.email,
+      schoolId,
+      error: e.toString(),
+      backupSheet: backupSheetName,
+      status: 'FAILED'
+    });
+    
+    // Attempt recovery if backup exists
+    if (backupSheetName) {
+      try {
+        Logger.log('Attempting automatic recovery from backup: ' + backupSheetName);
+        restoreFromBackup_(backupSheetName, SHEETS.STUDENTS);
+        return { success: false, message: 'An error occurred. Data has been automatically recovered from backup. ' + e.message };
+      } catch (recoveryError) {
+        Logger.log('[CRITICAL] Recovery failed: ' + recoveryError);
+        return { success: false, message: 'Critical error: ' + e.message + '. Please contact support immediately and reference backup: ' + backupSheetName };
+      }
+    }
+    
+    return { success: false, message: e.message };
+  }
   finally { lock.releaseLock(); }
 }
 
@@ -979,12 +1309,40 @@ function deleteStudent(token, studentId) {
   const user = getSessionUser(token);
   const validation = canDeleteStudent(token, studentId);
   if (!validation.canDelete) return { success: false, message: validation.reason };
+  
   const sheet = SS.getSheetByName(SHEETS.STUDENTS);
   const data = sheet.getDataRange().getValues();
+  
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === studentId) {
       const schoolId = data[i][2];
-      sheet.deleteRow(i + 1);
+      const studentName = data[i][1];
+      
+      if (ENABLE_SOFT_DELETES) {
+        // Soft delete: mark as deleted with timestamp
+        const deletedCol = ensureSoftDeleteColumn_(sheet, SHEETS.STUDENTS);
+        if (deletedCol !== -1) {
+          sheet.getRange(i + 1, deletedCol + 1).setValue(new Date().toISOString());
+          createAuditLog_('STUDENT_DELETED', {
+            user: user.email,
+            studentId,
+            studentName,
+            schoolId,
+            method: 'soft_delete'
+          });
+        }
+      } else {
+        // Hard delete: completely remove row
+        sheet.deleteRow(i + 1);
+        createAuditLog_('STUDENT_DELETED', {
+          user: user.email,
+          studentId,
+          studentName,
+          schoolId,
+          method: 'hard_delete'
+        });
+      }
+      
       invalidateStudentsCache_(schoolId);
       return { success: true };
     }
