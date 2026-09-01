@@ -10,6 +10,35 @@ const SHEETS = {
 const DATA_CACHE_TTL_SECONDS = 300; // 5 minutes
 const STUDENT_CACHE_TTL_SECONDS = 600; // 10 minutes
 
+// --- ASSESSMENT MODE CONFIG ---
+// Developer-editable. Options:
+// 'full'               => Baseline -> Midline -> Endline (default strict flow)
+// 'baseline+endline'   => Only Baseline and Endline. Endline requires Baseline.
+// 'baseline-only'      => Only Baseline allowed.
+// Change this value as needed by developers (no UI required).
+const ASSESSMENT_MODE = 'baseline+endline';
+
+function isAssessmentTypeEnabled(type) {
+  if (!type) return false;
+  const t = String(type).trim();
+  if (ASSESSMENT_MODE === 'full') return ['Baseline', 'Midline', 'Endline'].includes(t);
+  if (ASSESSMENT_MODE === 'baseline+endline') return ['Baseline', 'Endline'].includes(t);
+  if (ASSESSMENT_MODE === 'baseline-only') return ['Baseline'].includes(t);
+  // fallback: allow only baseline
+  return t === 'Baseline';
+}
+
+function getAssessmentPrerequisite(type) {
+  if (!type) return null;
+  const t = String(type).trim();
+  if (t === 'Midline') return 'Baseline';
+  if (t === 'Endline') {
+    // In 'full' mode Endline requires Midline; in baseline+endline it requires Baseline
+    return ASSESSMENT_MODE === 'full' ? 'Midline' : 'Baseline';
+  }
+  return null;
+}
+
 function doGet(e) {
   return HtmlService.createTemplateFromFile('LoginPage')
     .evaluate()
@@ -593,10 +622,18 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
     return { students: [], allStudentsForSchool, kpis: getKpis_(), existingDataMap: {} };
   }
 
-  if (assessmentType === 'Midline' || assessmentType === 'Endline') {
-    const prerequisite = assessmentType === 'Midline' ? 'Baseline' : 'Midline';
+  // Validate that the requested assessment type is enabled in the current mode
+  if (!isAssessmentTypeEnabled(assessmentType)) {
+    Logger.log('getAssessmentGridData: assessmentType disabled by mode. type=' + assessmentType + ' mode=' + ASSESSMENT_MODE);
+    throw new Error(`${assessmentType} assessments are disabled in the current assessment mode.`);
+  }
+
+  // Enforce prerequisite rules (consider existing assessments only)
+  const prerequisite = getAssessmentPrerequisite(assessmentType);
+  if (prerequisite) {
     const types = getAssessmentTypesForStudent_(students[0].studentId);
     if (!types.has(prerequisite)) {
+      Logger.log('getAssessmentGridData: prerequisite missing for ' + assessmentType + ' student=' + students[0].studentId + ' need=' + prerequisite);
       throw new Error(`A ${prerequisite} assessment must be completed before a ${assessmentType} can be entered.`);
     }
   }
@@ -660,11 +697,41 @@ function saveAssessments(token, assessmentData) {
     const toDelete = new Set();
     const schoolIds = new Set();
     assessmentData.forEach(item => {
+      // validate assessment type is enabled
+      if (!isAssessmentTypeEnabled(item.assessmentType)) {
+        throw new Error(`${item.assessmentType} assessments are disabled in the current assessment mode.`);
+      }
       schoolIds.add(item.schoolId);
       toDelete.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`);
     });
     schoolIds.forEach(schoolId => ensureSchoolAccess_(user, schoolId));
     const rows = [];
+
+    // Build a map of existing assessment types per student so we can validate prerequisites
+    const existingTypesMap = {};
+    assessmentData.forEach(item => {
+      if (!existingTypesMap[item.studentId]) existingTypesMap[item.studentId] = getAssessmentTypesForStudent_(item.studentId);
+    });
+
+    // Also add types that are being created in this payload (so ordering within the same save works)
+    assessmentData.forEach(item => {
+      if (item.status === 'Present') {
+        existingTypesMap[item.studentId].add(item.assessmentType);
+      }
+    });
+
+    // Validate prerequisites using simulated existing+new types
+    for (let i = 0; i < assessmentData.length; i++) {
+      const item = assessmentData[i];
+      const need = getAssessmentPrerequisite(item.assessmentType);
+      if (need) {
+        const set = existingTypesMap[item.studentId] || new Set();
+        if (!set.has(need)) {
+          Logger.log('saveAssessments: prerequisite missing for student=' + item.studentId + ' type=' + item.assessmentType + ' need=' + need);
+          throw new Error(`A ${need} assessment must be completed before a ${item.assessmentType} can be entered for student ${item.studentId}.`);
+        }
+      }
+    }
     assessmentData.forEach(item => {
       const { studentId, schoolId, assessmentType, status, scores, assessmentDate } = item;
       const assessmentTimestamp = parseAssessmentDate(assessmentDate);
