@@ -744,10 +744,15 @@ function getStudentsForSchool_(schoolId) {
   if (cached) return cached;
   const data = getCachedSheetValues_(SHEETS.STUDENTS);
   const headers = data[0] || [];
+  const idCol = headers.indexOf('StudentID');
+  const nameCol = headers.indexOf('StudentName');
+  const classCol = headers.indexOf('Class');
   const genderCol = headers.indexOf('Gender');
+  const deletedCol = headers.indexOf('_Deleted');
+  const schoolIdCol = headers.indexOf('SchoolID');
   const students = data.slice(1)
-    .filter(r => r[2] == schoolId)
-    .map(r => ({ studentId: r[0], studentName: r[1], class: r[3], gender: genderCol === -1 ? '' : r[genderCol] }));
+    .filter(r => r[schoolIdCol] == schoolId && (deletedCol === -1 || !r[deletedCol]))  // Use dynamic columns, proper deleted check
+    .map(r => ({ studentId: idCol === -1 ? '' : r[idCol], studentName: nameCol === -1 ? '' : r[nameCol], class: classCol === -1 ? '' : r[classCol], gender: genderCol === -1 ? '' : r[genderCol] }));
   putCachedJson_(key, students, STUDENT_CACHE_TTL_SECONDS);
   return students;
 }
@@ -777,8 +782,12 @@ function getExistingAssessmentDataForClass(token, schoolId, classValue, assessme
   ensureSchoolAccess_(user, schoolId);
   const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
   const studentsData = getCachedSheetValues_(SHEETS.STUDENTS);
+  const headers = studentsData[0] || [];
+  const idCol = headers.indexOf('StudentID');
+  const classCol = headers.indexOf('Class');
+  const schoolIdCol = headers.indexOf('SchoolID');
   const studentClassMap = {};
-  for (let i = 1; i < studentsData.length; i++) if (studentsData[i][0] && studentsData[i][2] == schoolId) studentClassMap[studentsData[i][0]] = studentsData[i][3];
+  for (let i = 1; i < studentsData.length; i++) if (studentsData[i][idCol] && studentsData[i][schoolIdCol] == schoolId) studentClassMap[studentsData[i][idCol]] = studentsData[i][classCol];
   const result = {};
   for (let i = 1; i < data.length; i++) {
     const studentId = data[i][1];
@@ -897,8 +906,8 @@ function saveAssessments(token, assessmentData) {
     if (allData.length === 0) throw new Error('Assessments sheet is empty or corrupted.');
     
     const header = allData[0] || [];
-    const toDelete = new Set();
     const schoolIds = new Set();
+    const toDelete = new Set();
     
     assessmentData.forEach(item => {
       // Validate assessment type is enabled
@@ -914,22 +923,20 @@ function saveAssessments(token, assessmentData) {
     // BACKUP: Create backup before modifications
     backupSheetName = createDataBackup_(SHEETS.ASSESSMENTS, 'Pre-save backup for assessments');
     
-    const rows = [];
-
-    // Build a map of existing assessment types per student so we can validate prerequisites
+    // Build a map of existing assessment types per student for prerequisite validation
     const existingTypesMap = {};
     assessmentData.forEach(item => {
       if (!existingTypesMap[item.studentId]) existingTypesMap[item.studentId] = getAssessmentTypesForStudent_(item.studentId);
     });
 
-    // Also add types that are being created in this payload (so ordering within the same save works)
+    // Add types being created in this payload
     assessmentData.forEach(item => {
       if (item.status === 'Present') {
         existingTypesMap[item.studentId].add(item.assessmentType);
       }
     });
 
-    // Validate prerequisites using simulated existing+new types
+    // Validate prerequisites
     for (let i = 0; i < assessmentData.length; i++) {
       const item = assessmentData[i];
       const need = getAssessmentPrerequisite(item.assessmentType);
@@ -942,31 +949,50 @@ function saveAssessments(token, assessmentData) {
       }
     }
     
+    // BUILD NEW RECORDS
+    const newRows = [];
     assessmentData.forEach(item => {
       const { studentId, schoolId, assessmentType, status, scores, assessmentDate } = item;
       const assessmentTimestamp = parseAssessmentDate(assessmentDate);
-      if (status === 'Absent') rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', assessmentTimestamp]);
-      else scores.forEach(s => {
-        const score = parseInt(s.score, 10);
-        if (score >= 1 && score <= 5) rows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, score, 'Present', assessmentTimestamp]);
-      });
+      if (status === 'Absent') {
+        newRows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', assessmentTimestamp]);
+      } else {
+        scores.forEach(s => {
+          const score = parseInt(s.score, 10);
+          if (score >= 1 && score <= 5) {
+            newRows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, score, 'Present', assessmentTimestamp]);
+          }
+        });
+      }
     });
     
-    const keptRows = allData.slice(1).filter(row => !toDelete.has(`${row[1]}|${row[2]}|${row[4]}`));
-    const output = [header].concat(keptRows, rows);
+    // IDENTIFY ROWS TO DELETE: Find existing records for this school/student/type combo
+    const rowsToDelete = [];
+    const allRows = allData.slice(1);
+    for (let i = 0; i < allRows.length; i++) {
+      const row = allRows[i];
+      const key = `${row[1]}|${row[2]}|${row[4]}`; // studentId|schoolId|assessmentType
+      if (toDelete.has(key)) {
+        rowsToDelete.push(i + 2); // +2: 1-indexed and +1 for header row
+      }
+    }
     
-    // Validate output
-    if (!output || output.length === 0) throw new Error('No data to write - operation aborted.');
+    // DELETE OLD RECORDS: Delete in reverse order to prevent index shifting
+    for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+      sheet.deleteRow(rowsToDelete[i]);
+    }
     
-    const range = sheet.getRange(1, 1, output.length, output[0].length);
-    range.clearContent();
-    range.setValues(output);
+    // APPEND NEW RECORDS
+    newRows.forEach(row => {
+      sheet.appendRow(row);
+    });
     
     invalidateSheetCache_(SHEETS.ASSESSMENTS);
     
     createAuditLog_('ASSESSMENTS_SAVED', {
       user: user.email,
       recordCount: assessmentData.length,
+      dataType: 'ASSESSMENTS',
       status: 'SUCCESS',
       backupSheet: backupSheetName
     });
@@ -977,6 +1003,8 @@ function saveAssessments(token, assessmentData) {
     
     createAuditLog_('ASSESSMENTS_SAVED_FAILED', {
       user: user.email,
+      recordCount: assessmentData.length,
+      dataType: 'ASSESSMENTS',
       error: e.toString(),
       backupSheet: backupSheetName,
       status: 'FAILED'
@@ -1125,7 +1153,10 @@ function canDeleteSchool(token, schoolId) {
   const user = getSessionUser(token);
   ensureSchoolAccess_(user, schoolId);
   const studentsData = getCachedSheetValues_(SHEETS.STUDENTS);
-  if (studentsData.slice(1).some(r => r[2] === schoolId && r[0])) return { canDelete: false, reason: 'Students exist for this school. Please delete all students first.' };
+  const headers = studentsData[0] || [];
+  const idCol = headers.indexOf('StudentID');
+  const schoolIdCol = headers.indexOf('SchoolID');
+  if (studentsData.slice(1).some(r => r[schoolIdCol] === schoolId && r[idCol])) return { canDelete: false, reason: 'Students exist for this school. Please delete all students first.' };
   const mappingData = getCachedSheetValues_(SHEETS.MAPPING);
   if (mappingData.slice(1).some(r => r[2] === schoolId && r[0])) return { canDelete: false, reason: 'This school is mapped to a volunteer. Please remove the mapping first.' };
   return { canDelete: true };
@@ -1198,61 +1229,77 @@ function saveOrUpdateStudents(token, students, schoolId) {
     if (allData.length === 0) throw new Error('Students sheet is empty or corrupted.');
     
     const headers = allData[0];
-    const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class'), genderCol = headers.indexOf('Gender');
+    const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class'), genderCol = headers.indexOf('Gender'), schoolIdCol = headers.indexOf('SchoolID');
     
     // Validate columns
-    if ([idCol, nameCol, classCol, genderCol].includes(-1)) {
+    if ([idCol, nameCol, classCol, genderCol, schoolIdCol].includes(-1)) {
       throw new Error('Required column missing in Students sheet.');
     }
     
     // BACKUP: Create backup before any modifications
     backupSheetName = createDataBackup_(SHEETS.STUDENTS, 'Pre-save backup for schoolId=' + schoolId);
     
-    // TRANSFORM: Build update map
-    const all = allData.slice(1);
-    const idToIndex = {};
-    all.forEach((row, i) => { if (row[idCol]) idToIndex[row[idCol]] = i; });
+    // SEPARATE: Existing students (have studentId) from new students (no studentId)
+    const existingStudents = students.filter(s => s.studentId && String(s.studentId).trim());
+    const newStudents = students.filter(s => !s.studentId || !String(s.studentId).trim());
     
-    // Apply changes
+    // BUILD: Create input map for existing students (keyed by studentId)
+    const inputMap = {};
+    existingStudents.forEach(s => { inputMap[s.studentId] = s; });
+    
+    // IDENTIFY CHANGES: Compare current with input
+    const all = allData.slice(1);
+    const updates = [];  // [sheetRowNum, newValues]
+    const newRows = [];  // New students to append
     const ts = new Date();
     const updatedCount = { new: 0, updated: 0 };
-    students.forEach(s => {
-      const rowIndex = idToIndex[s.studentId];
-      if (rowIndex != null) {
-        // Existing student - update
-        if (all[rowIndex][2] != schoolId) {
-          throw new Error('A student row does not belong to the selected school.');
+    
+    // Process existing rows - update if in input
+    for (let i = 0; i < all.length; i++) {
+      const existingId = all[i][idCol];
+      if (inputMap[existingId]) {
+        const s = inputMap[existingId];
+        // Check if any field changed
+        if (all[i][nameCol] !== s.studentName || all[i][classCol] !== s.class || all[i][genderCol] !== (s.gender || '')) {
+          const row = all[i].slice(); // Clone
+          row[nameCol] = s.studentName;
+          row[classCol] = s.class;
+          row[genderCol] = s.gender || '';
+          if (deletedCol !== -1) row[deletedCol] = ''; // Clear deleted marker if re-activating
+          updates.push({ rowNum: i + 2, values: [row] }); // +2 because sheet is 1-indexed and we skip header
+          updatedCount.updated++;
         }
-        all[rowIndex][nameCol] = s.studentName;
-        all[rowIndex][classCol] = s.class;
-        all[rowIndex][genderCol] = s.gender || '';
-        if (deletedCol !== -1) all[rowIndex][deletedCol] = ''; // Clear deleted marker if re-activating
-        updatedCount.updated++;
-      } else {
-        // New student
-        const row = new Array(headers.length).fill('');
-        row[idCol] = 'STU-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
-        row[nameCol] = s.studentName;
-        row[2] = schoolId;
-        row[classCol] = s.class;
-        row[genderCol] = s.gender || '';
-        if (headers.length > 4) row[4] = ts;
-        if (deletedCol !== -1) row[deletedCol] = '';
-        all.push(row);
-        updatedCount.new++;
+        delete inputMap[existingId]; // Mark as processed
       }
+    }
+    
+    // Process all new students (both from newStudents array AND remaining items in inputMap that weren't matched)
+    const allNewStudents = newStudents.concat(Object.values(inputMap));
+    allNewStudents.forEach(s => {
+      const row = new Array(headers.length).fill('');
+      row[idCol] = 'STU-' + new Date().getTime() + '-' + Math.floor(Math.random() * 1000);
+      row[nameCol] = s.studentName;
+      row[schoolIdCol] = schoolId;
+      row[classCol] = s.class;
+      row[genderCol] = s.gender || '';
+      if (headers.length > 4) row[4] = ts;
+      if (deletedCol !== -1) row[deletedCol] = '';
+      newRows.push(row);
+      updatedCount.new++;
     });
     
-    // WRITE: Atomic write operation with validation
-    const output = [headers].concat(all);
+    // APPLY CHANGES: Batch updates for efficiency
+    const cols = headers.length;
     
-    // Validate output
-    if (!output || output.length === 0) throw new Error('No data to write - operation aborted.');
-    if (output.length < 2) throw new Error('All existing students would be lost - operation aborted.');
+    // Update existing rows (do updates first, before appends change row numbers)
+    updates.forEach(update => {
+      sheet.getRange(update.rowNum, 1, 1, cols).setValues(update.values);
+    });
     
-    const range = sheet.getRange(1, 1, output.length, output[0].length);
-    range.clearContent();
-    range.setValues(output);
+    // Append new rows
+    newRows.forEach(row => {
+      sheet.appendRow(row);
+    });
     
     invalidateStudentsCache_(schoolId);
     
@@ -1260,10 +1307,11 @@ function saveOrUpdateStudents(token, students, schoolId) {
     createAuditLog_('STUDENTS_SAVED', {
       user: user.email,
       schoolId,
-      newCount: updatedCount.new,
-      updateCount: updatedCount.updated,
+      recordCount: updatedCount.new + updatedCount.updated,
+      dataType: 'STUDENTS',
       status: 'SUCCESS',
-      backupSheet: backupSheetName
+      backupSheet: backupSheetName,
+      details: 'New: ' + updatedCount.new + ', Updated: ' + updatedCount.updated
     });
     
     return { success: true, message: 'Students saved successfully! (New: ' + updatedCount.new + ', Updated: ' + updatedCount.updated + ')' };
@@ -1274,6 +1322,8 @@ function saveOrUpdateStudents(token, students, schoolId) {
     createAuditLog_('STUDENTS_SAVED_FAILED', {
       user: user.email,
       schoolId,
+      recordCount: students.length,
+      dataType: 'STUDENTS',
       error: e.toString(),
       backupSheet: backupSheetName,
       status: 'FAILED'
@@ -1312,11 +1362,15 @@ function deleteStudent(token, studentId) {
   
   const sheet = SS.getSheetByName(SHEETS.STUDENTS);
   const data = sheet.getDataRange().getValues();
+  const headers = data[0] || [];
+  const idCol = headers.indexOf('StudentID');
+  const nameCol = headers.indexOf('StudentName');
+  const schoolIdCol = headers.indexOf('SchoolID');
   
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === studentId) {
-      const schoolId = data[i][2];
-      const studentName = data[i][1];
+    if (data[i][idCol] === studentId) {
+      const schoolId = data[i][schoolIdCol];
+      const studentName = data[i][nameCol];
       
       if (ENABLE_SOFT_DELETES) {
         // Soft delete: mark as deleted with timestamp
@@ -1367,7 +1421,11 @@ function getDashboardStats(user) {
     
     const scopedSchools = filterSchoolsByScope_(schoolsData.slice(1), user);
     const scopedSchoolIds = new Set(scopedSchools.map(s => s[0]));
-    const scopedStudents = studentsData.slice(1).filter(r => scopedSchoolIds.has(r[2]));
+    
+    // Get SchoolID column index for Students sheet
+    const studentHeaders = studentsData[0] || [];
+    const schoolIdCol = studentHeaders.indexOf('SchoolID');
+    const scopedStudents = studentsData.slice(1).filter(r => scopedSchoolIds.has(schoolIdCol === -1 ? r[2] : r[schoolIdCol]));
     const assessedSchoolIdsByType = {
       Baseline: new Set(),
       Midline: new Set(),
