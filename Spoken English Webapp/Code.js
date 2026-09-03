@@ -14,6 +14,7 @@ const STUDENT_CACHE_TTL_SECONDS = 600; // 10 minutes
 const ENABLE_SOFT_DELETES = true; // Mark deleted records instead of removing
 const ENABLE_AUDIT_LOG = true; // Log all modifications
 const BACKUP_RETENTION_HOURS = 72; // Keep backups for 72 hours
+const MAX_BACKUPS_PER_SHEET = 3; // Keep only the latest backups per data sheet
 const MAX_BATCH_SIZE = 100; // Process large operations in batches
 const OPERATION_TIMEOUT_MS = 60000; // 60 second timeout for operations
 
@@ -301,19 +302,26 @@ function cleanupOldBackups_(sheetName) {
     const sheets = SS.getSheets();
     const prefix = 'BACKUP_' + sheetName + '_';
     const backups = sheets.filter(s => s.getName().startsWith(prefix));
+    const cutoff = new Date().getTime() - (BACKUP_RETENTION_HOURS * 60 * 60 * 1000);
     
-    if (backups.length > 5) {
-      // Keep only 5 most recent backups
-      const sorted = backups.sort((a, b) => {
-        const aTime = extractBackupTime_(a.getName());
-        const bTime = extractBackupTime_(b.getName());
-        return bTime - aTime;
-      });
-      
-      for (let i = 5; i < sorted.length; i++) {
-        SS.deleteSheet(sorted[i]);
+    const sorted = backups
+      .map(sheet => ({ sheet, time: extractBackupTime_(sheet.getName()) }))
+      .sort((a, b) => b.time - a.time);
+
+    const toDelete = [];
+    sorted.forEach((backup, index) => {
+      const isTooOld = backup.time && backup.time < cutoff;
+      const exceedsLimit = index >= MAX_BACKUPS_PER_SHEET;
+      if (isTooOld || exceedsLimit) toDelete.push(backup.sheet);
+    });
+
+    toDelete.forEach(sheet => {
+      try {
+        SS.deleteSheet(sheet);
+      } catch (deleteError) {
+        Logger.log('Could not delete backup sheet ' + sheet.getName() + ': ' + deleteError);
       }
-    }
+    });
   } catch (e) {
     Logger.log('Cleanup failed: ' + e);
   }
@@ -321,7 +329,15 @@ function cleanupOldBackups_(sheetName) {
 
 function extractBackupTime_(sheetName) {
   const match = sheetName.match(/(\d{8}_\d{6})$/);
-  return match ? parseInt(match[1].replace('_', ''), 10) : 0;
+  if (!match) return 0;
+  const raw = match[1];
+  const year = Number(raw.slice(0, 4));
+  const month = Number(raw.slice(4, 6)) - 1;
+  const day = Number(raw.slice(6, 8));
+  const hour = Number(raw.slice(9, 11));
+  const minute = Number(raw.slice(11, 13));
+  const second = Number(raw.slice(13, 15));
+  return new Date(year, month, day, hour, minute, second).getTime();
 }
 
 function restoreFromBackup_(backupSheetName, targetSheetName) {
@@ -966,17 +982,53 @@ function saveAssessments(token, assessmentData) {
       }
     });
     
-    // IDENTIFY ROWS TO DELETE: Find existing records for this school/student/type combo
+    // IDENTIFY ROWS TO DELETE: Find existing records for this school/student/type combo.
+    // ── FIX: Use header-based column detection instead of hardcoded positional indices.
+    //    Hardcoded indices (row[1], row[2], row[4]) silently break if any column is ever
+    //    added, reordered, or shifted in the sheet, causing either:
+    //      (a) wrong rows being deleted (sporadic deletion of unrelated assessments), or
+    //      (b) the delete matching nothing (old records accumulate as duplicates).
+    const aStudentIdCol = header.indexOf('StudentID');
+    const aSchoolIdCol  = header.indexOf('SchoolID');
+    const aTypeCol      = header.indexOf('Type');
+
+    // Fall back to previously hardcoded positions if header names are not found.
+    // Logs a clear warning so this is visible in execution logs.
+    const useStudentCol = aStudentIdCol !== -1 ? aStudentIdCol : 1;
+    const useSchoolCol  = aSchoolIdCol  !== -1 ? aSchoolIdCol  : 2;
+    const useTypeCol    = aTypeCol      !== -1 ? aTypeCol      : 4;
+
+    if (aStudentIdCol === -1 || aSchoolIdCol === -1 || aTypeCol === -1) {
+      Logger.log('[WARNING] saveAssessments: Could not detect Assessments column positions by header name. ' +
+        'Falling back to hardcoded positions. Headers found: ' + JSON.stringify(header) +
+        '. This may cause incorrect row deletion if columns have been reordered.');
+    }
+
     const rowsToDelete = [];
     const allRows = allData.slice(1);
     for (let i = 0; i < allRows.length; i++) {
       const row = allRows[i];
-      const key = `${row[1]}|${row[2]}|${row[4]}`; // studentId|schoolId|assessmentType
+      const key = `${row[useStudentCol]}|${row[useSchoolCol]}|${row[useTypeCol]}`;
       if (toDelete.has(key)) {
         rowsToDelete.push(i + 2); // +2: 1-indexed and +1 for header row
       }
     }
-    
+
+    // SAFETY GUARD: Sanity-check the number of rows about to be deleted.
+    // Each student can have at most one row per KPI (~20 KPIs max) plus one Absent row.
+    // Deleting far more than that strongly suggests a column-detection or data mismatch bug.
+    const maxSafeDeletes = assessmentData.length * 25;
+    if (rowsToDelete.length > maxSafeDeletes) {
+      throw new Error(
+        `Safety check failed: about to delete ${rowsToDelete.length} assessment rows for only ` +
+        `${assessmentData.length} students. Exceeds safe threshold of ${maxSafeDeletes}. ` +
+        `Operation aborted to prevent data loss. Please contact support.`
+      );
+    }
+
+    Logger.log('saveAssessments: deleting ' + rowsToDelete.length + ' old rows, appending ' +
+      newRows.length + ' new rows. schoolId=' + Array.from(schoolIds).join(','));
+
     // DELETE OLD RECORDS: Delete in reverse order to prevent index shifting
     for (let i = rowsToDelete.length - 1; i >= 0; i--) {
       sheet.deleteRow(rowsToDelete[i]);
@@ -1236,8 +1288,14 @@ function saveOrUpdateStudents(token, students, schoolId) {
       throw new Error('Required column missing in Students sheet.');
     }
     
-    // BACKUP: Create backup before any modifications
-    backupSheetName = createDataBackup_(SHEETS.STUDENTS, 'Pre-save backup for schoolId=' + schoolId);
+    // Backup is best-effort only; saving students should not fail just because a
+    // hidden backup sheet cannot be created due Apps Script limits/protection.
+    try {
+      backupSheetName = createDataBackup_(SHEETS.STUDENTS, 'Pre-save backup for schoolId=' + schoolId);
+    } catch (backupError) {
+      Logger.log('[WARNING] Student save backup skipped: ' + backupError);
+      backupSheetName = null;
+    }
     
     // SEPARATE: Existing students (have studentId) from new students (no studentId)
     const existingStudents = students.filter(s => s.studentId && String(s.studentId).trim());
@@ -1296,10 +1354,11 @@ function saveOrUpdateStudents(token, students, schoolId) {
       sheet.getRange(update.rowNum, 1, 1, cols).setValues(update.values);
     });
     
-    // Append new rows
-    newRows.forEach(row => {
-      sheet.appendRow(row);
-    });
+    // Append new rows in one batch. This is faster and avoids appendRow timing
+    // quirks when multiple rows are added from the UI.
+    if (newRows.length) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, cols).setValues(newRows);
+    }
     
     invalidateStudentsCache_(schoolId);
     
