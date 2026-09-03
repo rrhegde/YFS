@@ -1922,46 +1922,32 @@ function handleDeleteStudent(studentId, btn) {
   
   const row = btn.closest('tr');
   const studentName = row.querySelector('.student-name').value;
-  
-  // Check for child records before showing confirmation
-  google.script.run
-    .withSuccessHandler(validation => {
-      if (!validation.canDelete) {
-        showToast(validation.reason, 'warning');
-        return;
-      }
-      
-      // If validation passes, show confirmation modal
-      showConfirmModal(
-        'Delete Student',
-        `Are you sure you want to delete "${escHtml(studentName)}"? This action cannot be undone.`,
-        () => {
-          btn.disabled = true;
-          showLoading('Deleting student...');
-          google.script.run
-            .withSuccessHandler(res => {
-              hideLoading();
-              if (res.success) {
-                row.remove();
-                showToast('Student deleted successfully.', 'success');
-              } else {
-                showToast(res.message || 'Could not delete student.', 'danger');
-                btn.disabled = false;
-              }
-            })
-            .withFailureHandler(err => {
-              hideLoading();
-              showToast(err.message, 'danger');
-              btn.disabled = false;
-            })
-            .deleteStudent(sessionToken, studentId);
-        }
-      );
-    })
-    .withFailureHandler(err => {
-      showToast('Validation error: ' + err.message, 'danger');
-    })
-    .canDeleteStudent(sessionToken, studentId);
+
+  showConfirmModal(
+    'Delete Student',
+    `Are you sure you want to delete "${studentName}"? This action cannot be undone.`,
+    () => {
+      btn.disabled = true;
+      showLoading('Checking and deleting student...');
+      google.script.run
+        .withSuccessHandler(res => {
+          hideLoading();
+          if (res.success) {
+            row.remove();
+            showToast('Student deleted successfully.', 'success');
+          } else {
+            showToast(res.message || 'Could not delete student.', 'danger');
+            btn.disabled = false;
+          }
+        })
+        .withFailureHandler(err => {
+          hideLoading();
+          showToast(err.message, 'danger');
+          btn.disabled = false;
+        })
+        .deleteStudent(sessionToken, studentId);
+    }
+  );
 }
 
 

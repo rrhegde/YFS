@@ -1436,8 +1436,21 @@ function canDeleteStudent(token, studentId) {
   const user = getSessionUser(token);
   ensurePermission_(canManageStudents_(user), 'Authorization failed.');
   ensureStudentAccess_(user, studentId);
-  const assessmentsData = getCachedSheetValues_(SHEETS.ASSESSMENTS);
-  if (assessmentsData.slice(1).some(r => r[1] === studentId && r[0])) return { canDelete: false, reason: 'Assessment records exist for this student. Please delete assessment records first.' };
+  const sheet = SS.getSheetByName(SHEETS.ASSESSMENTS);
+  if (!sheet) return { canDelete: true };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { canDelete: true };
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] || [];
+  const studentIdCol = headers.indexOf('StudentID');
+  if (studentIdCol === -1) throw new Error('StudentID column missing in Assessments sheet.');
+
+  const studentIds = sheet.getRange(2, studentIdCol + 1, lastRow - 1, 1).getValues();
+  const targetId = String(studentId);
+  if (studentIds.some(row => String(row[0]) === targetId)) {
+    return { canDelete: false, reason: 'Assessment records exist for this student. Please delete assessment records first.' };
+  }
   return { canDelete: true };
 }
 
