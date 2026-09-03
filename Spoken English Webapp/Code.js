@@ -13,6 +13,7 @@ const STUDENT_CACHE_TTL_SECONDS = 600; // 10 minutes
 // --- SAFETY & RECOVERY CONFIG ---
 const ENABLE_SOFT_DELETES = true; // Mark deleted records instead of removing
 const ENABLE_AUDIT_LOG = true; // Log all modifications
+const ENABLE_DATA_BACKUPS = false; // Toggle full-sheet backup creation before large saves
 const BACKUP_RETENTION_HOURS = 72; // Keep backups for 72 hours
 const MAX_BACKUPS_PER_SHEET = 3; // Keep only the latest backups per data sheet
 const MAX_BATCH_SIZE = 100; // Process large operations in batches
@@ -267,7 +268,10 @@ function getOrCreateAuditSheet_() {
 
 // --- BACKUP & RECOVERY ---
 function createDataBackup_(sheetName, reason) {
-  if (!ENABLE_AUDIT_LOG) return null;
+  if (!ENABLE_DATA_BACKUPS) {
+    Logger.log('Backup disabled by ENABLE_DATA_BACKUPS=false for ' + sheetName + '. reason=' + reason);
+    return null;
+  }
   try {
     const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
     const backupSheetName = 'BACKUP_' + sheetName + '_' + timestamp;
@@ -338,6 +342,27 @@ function extractBackupTime_(sheetName) {
   const minute = Number(raw.slice(11, 13));
   const second = Number(raw.slice(13, 15));
   return new Date(year, month, day, hour, minute, second).getTime();
+}
+
+function groupConsecutiveRows_(rowNumbers) {
+  if (!rowNumbers || rowNumbers.length === 0) return [];
+  const sorted = rowNumbers.slice().sort((a, b) => a - b);
+  const groups = [];
+  let start = sorted[0];
+  let count = 1;
+
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === sorted[i - 1] + 1) {
+      count++;
+    } else {
+      groups.push({ start, count });
+      start = sorted[i];
+      count = 1;
+    }
+  }
+
+  groups.push({ start, count });
+  return groups;
 }
 
 function restoreFromBackup_(backupSheetName, targetSheetName) {
@@ -1029,15 +1054,17 @@ function saveAssessments(token, assessmentData) {
     Logger.log('saveAssessments: deleting ' + rowsToDelete.length + ' old rows, appending ' +
       newRows.length + ' new rows. schoolId=' + Array.from(schoolIds).join(','));
 
-    // DELETE OLD RECORDS: Delete in reverse order to prevent index shifting
-    for (let i = rowsToDelete.length - 1; i >= 0; i--) {
-      sheet.deleteRow(rowsToDelete[i]);
+    // DELETE OLD RECORDS: Delete contiguous row groups in reverse order to reduce
+    // Apps Script calls while still preventing row index shifting.
+    const deleteGroups = groupConsecutiveRows_(rowsToDelete);
+    for (let i = deleteGroups.length - 1; i >= 0; i--) {
+      sheet.deleteRows(deleteGroups[i].start, deleteGroups[i].count);
     }
     
-    // APPEND NEW RECORDS
-    newRows.forEach(row => {
-      sheet.appendRow(row);
-    });
+    // APPEND NEW RECORDS: write all rows in one batch instead of appendRow per KPI.
+    if (newRows.length) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
+    }
     
     invalidateSheetCache_(SHEETS.ASSESSMENTS);
     
