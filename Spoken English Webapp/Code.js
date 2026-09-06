@@ -14,6 +14,9 @@ const STUDENT_CACHE_TTL_SECONDS = 600; // 10 minutes
 const ENABLE_SOFT_DELETES = true; // Mark deleted records instead of removing
 const ENABLE_AUDIT_LOG = true; // Log all modifications
 const ENABLE_DATA_BACKUPS = false; // Toggle full-sheet backup creation before large saves
+const ENABLE_FULL_SHEET_RESTORE = false; // Keep disabled unless manually restoring from a backup
+const ENABLE_TRANSACTION_EMAILS = true; // Notify data owner after student/assessment transactions
+const TRANSACTION_EMAIL_TO = 'ekamdata@youthforseva.org';
 const BACKUP_RETENTION_HOURS = 72; // Keep backups for 72 hours
 const MAX_BACKUPS_PER_SHEET = 3; // Keep only the latest backups per data sheet
 const MAX_BATCH_SIZE = 100; // Process large operations in batches
@@ -249,6 +252,39 @@ function createAuditLog_(action, details) {
   }
 }
 
+function sendTransactionEmail_(action, details) {
+  if (!ENABLE_TRANSACTION_EMAILS || !TRANSACTION_EMAIL_TO) return;
+  try {
+    const transactionTime = new Date();
+    const timeText = Utilities.formatDate(transactionTime, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss z');
+    const schoolIdText = Array.isArray(details.schoolIds)
+      ? details.schoolIds.join(', ')
+      : (details.schoolId || '');
+    const subject = '[Spoken English Portal] ' + action + ' - ' + (schoolIdText || 'No School ID');
+    const lines = [
+      'Spoken English Portal data transaction completed.',
+      '',
+      'Transaction Type: ' + action,
+      'School ID: ' + (schoolIdText || 'N/A'),
+      'Transaction Date/Time: ' + timeText,
+      'Logged-in User ID: ' + (details.user || 'N/A'),
+      'Record Count: ' + (details.recordCount || 0)
+    ];
+
+    if (details.details) lines.push('Details: ' + details.details);
+    if (details.assessmentTypes) lines.push('Assessment Type(s): ' + details.assessmentTypes.join(', '));
+    if (details.studentId) lines.push('Student ID: ' + details.studentId);
+
+    MailApp.sendEmail({
+      to: TRANSACTION_EMAIL_TO,
+      subject,
+      body: lines.join('\n')
+    });
+  } catch (e) {
+    Logger.log('[EMAIL WARNING] Transaction email failed for ' + action + ': ' + e);
+  }
+}
+
 function getOrCreateAuditSheet_() {
   try {
     let sheet = SS.getSheetByName('AUDIT_LOG');
@@ -344,28 +380,11 @@ function extractBackupTime_(sheetName) {
   return new Date(year, month, day, hour, minute, second).getTime();
 }
 
-function groupConsecutiveRows_(rowNumbers) {
-  if (!rowNumbers || rowNumbers.length === 0) return [];
-  const sorted = rowNumbers.slice().sort((a, b) => a - b);
-  const groups = [];
-  let start = sorted[0];
-  let count = 1;
-
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i] === sorted[i - 1] + 1) {
-      count++;
-    } else {
-      groups.push({ start, count });
-      start = sorted[i];
-      count = 1;
-    }
+function restoreFromBackup_(backupSheetName, targetSheetName) {
+  if (!ENABLE_FULL_SHEET_RESTORE) {
+    throw new Error('Full-sheet restore is disabled by ENABLE_FULL_SHEET_RESTORE=false.');
   }
 
-  groups.push({ start, count });
-  return groups;
-}
-
-function restoreFromBackup_(backupSheetName, targetSheetName) {
   try {
     const backupSheet = SS.getSheetByName(backupSheetName);
     const targetSheet = SS.getSheetByName(targetSheetName);
@@ -803,8 +822,12 @@ function getExistingAssessmentTypes(token, studentId) {
   ensurePermission_(canAssess_(user), 'Authorization failed.');
   ensureStudentAccess_(user, studentId);
   const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
+  const headers = data[0] || [];
+  const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
   const types = new Set();
-  for (let i = 1; i < data.length; i++) if (data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
+  for (let i = 1; i < data.length; i++) {
+    if (!isDeletedRow_(data[i], deletedCol) && data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
+  }
   return Array.from(types);
 }
 
@@ -813,8 +836,12 @@ function getExistingAssessmentScores(token, studentId, assessmentType) {
   ensurePermission_(canAssess_(user), 'Authorization failed.');
   ensureStudentAccess_(user, studentId);
   const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
+  const headers = data[0] || [];
+  const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
   const scores = [];
-  for (let i = 1; i < data.length; i++) if (data[i][1] == studentId && data[i][4] === assessmentType && data[i][7] === 'Present') scores.push({ kpiId: data[i][5], score: data[i][6] });
+  for (let i = 1; i < data.length; i++) {
+    if (!isDeletedRow_(data[i], deletedCol) && data[i][1] == studentId && data[i][4] === assessmentType && data[i][7] === 'Present') scores.push({ kpiId: data[i][5], score: data[i][6] });
+  }
   return scores;
 }
 
@@ -822,6 +849,8 @@ function getExistingAssessmentDataForClass(token, schoolId, classValue, assessme
   const user = getSessionUser(token);
   ensureSchoolAccess_(user, schoolId);
   const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
+  const assessmentHeaders = data[0] || [];
+  const deletedCol = findHeaderIndex_(assessmentHeaders, '_Deleted', -1);
   const studentsData = getCachedSheetValues_(SHEETS.STUDENTS);
   const headers = studentsData[0] || [];
   const idCol = headers.indexOf('StudentID');
@@ -831,6 +860,7 @@ function getExistingAssessmentDataForClass(token, schoolId, classValue, assessme
   for (let i = 1; i < studentsData.length; i++) if (studentsData[i][idCol] && studentsData[i][schoolIdCol] == schoolId) studentClassMap[studentsData[i][idCol]] = studentsData[i][classCol];
   const result = {};
   for (let i = 1; i < data.length; i++) {
+    if (isDeletedRow_(data[i], deletedCol)) continue;
     const studentId = data[i][1];
     if (data[i][2] == schoolId && data[i][4] === assessmentType && studentClassMap[studentId] == classValue) {
       if (!result[studentId]) result[studentId] = { status: data[i][7], scores: [] };
@@ -845,6 +875,18 @@ function formatAssessmentDateForClient_(value) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function findHeaderIndex_(headers, columnName, fallbackIndex) {
+  const target = String(columnName || '').trim();
+  for (let i = 0; i < headers.length; i++) {
+    if (String(headers[i] || '').trim() === target) return i;
+  }
+  return fallbackIndex;
+}
+
+function isDeletedRow_(row, deletedCol) {
+  return deletedCol !== -1 && !!row[deletedCol];
 }
 
 function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
@@ -883,13 +925,17 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
 
   const kpis = getKpis_();
   const assessments = getCachedSheetValues_(SHEETS.ASSESSMENTS);
+  const assessmentHeaders = assessments[0] || [];
+  const timestampCol = findHeaderIndex_(assessmentHeaders, 'Timestamp', 8);
+  const deletedCol = findHeaderIndex_(assessmentHeaders, '_Deleted', -1);
   const result = {};
   let assessmentDate = '';
   for (let i = 1; i < assessments.length; i++) {
     const row = assessments[i];
+    if (isDeletedRow_(row, deletedCol)) continue;
     const studentId = row[1];
     if (row[2] == schoolId && row[4] === assessmentType && String(studentClassMap[studentId]).trim() === String(classValue).trim()) {
-      if (!assessmentDate) assessmentDate = formatAssessmentDateForClient_(row[8]);
+      if (!assessmentDate) assessmentDate = formatAssessmentDateForClient_(row[timestampCol]);
       if (!result[studentId]) result[studentId] = { status: row[7], scores: [] };
       if (row[7] === 'Present' && row[5]) result[studentId].scores.push({ kpiId: row[5], score: row[6] });
     }
@@ -900,9 +946,11 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
 
 function getAssessmentTypesForStudent_(studentId) {
   const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
+  const headers = data[0] || [];
+  const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
   const types = new Set();
   for (let i = 1; i < data.length; i++) {
-    if (data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
+    if (!isDeletedRow_(data[i], deletedCol) && data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
   }
   return types;
 }
@@ -943,12 +991,17 @@ function saveAssessments(token, assessmentData) {
   let backupSheetName = null;
   try {
     const sheet = SS.getSheetByName(SHEETS.ASSESSMENTS);
+    const deletedCol = ensureSoftDeleteColumn_(sheet, SHEETS.ASSESSMENTS);
+    if (deletedCol === -1) {
+      throw new Error('Safe assessment save requires the _Deleted column to be available.');
+    }
+
     const allData = sheet.getDataRange().getValues();
     if (allData.length === 0) throw new Error('Assessments sheet is empty or corrupted.');
     
     const header = allData[0] || [];
     const schoolIds = new Set();
-    const toDelete = new Set();
+    const targetKeys = new Set();
     
     assessmentData.forEach(item => {
       // Validate assessment type is enabled
@@ -956,7 +1009,7 @@ function saveAssessments(token, assessmentData) {
         throw new Error(`${item.assessmentType} assessments are disabled in the current assessment mode.`);
       }
       schoolIds.add(item.schoolId);
-      toDelete.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`);
+      targetKeys.add(`${item.studentId}|${item.schoolId}|${item.assessmentType}`);
     });
     
     schoolIds.forEach(schoolId => ensureSchoolAccess_(user, schoolId));
@@ -990,38 +1043,54 @@ function saveAssessments(token, assessmentData) {
       }
     }
     
-    // BUILD NEW RECORDS
-    const newRows = [];
-    assessmentData.forEach(item => {
-      const { studentId, schoolId, assessmentType, status, scores, assessmentDate } = item;
-      const assessmentTimestamp = parseAssessmentDate(assessmentDate);
-      if (status === 'Absent') {
-        newRows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, null, null, 'Absent', assessmentTimestamp]);
-      } else {
-        scores.forEach(s => {
-          const score = parseInt(s.score, 10);
-          if (score >= 1 && score <= 5) {
-            newRows.push([generateUniqueId(), studentId, schoolId, user.email, assessmentType, s.kpiId, score, 'Present', assessmentTimestamp]);
-          }
-        });
-      }
-    });
-    
-    // IDENTIFY ROWS TO DELETE: Find existing records for this school/student/type combo.
-    // ── FIX: Use header-based column detection instead of hardcoded positional indices.
-    //    Hardcoded indices (row[1], row[2], row[4]) silently break if any column is ever
-    //    added, reordered, or shifted in the sheet, causing either:
-    //      (a) wrong rows being deleted (sporadic deletion of unrelated assessments), or
-    //      (b) the delete matching nothing (old records accumulate as duplicates).
-    const aStudentIdCol = header.indexOf('StudentID');
-    const aSchoolIdCol  = header.indexOf('SchoolID');
-    const aTypeCol      = header.indexOf('Type');
+    // BUILD/UPDATE RECORDS WITHOUT PHYSICAL DELETES
+    const assessmentIdCol = findHeaderIndex_(header, 'AssessmentID', 0);
+    const studentIdCol = findHeaderIndex_(header, 'StudentID', 1);
+    const schoolIdCol = findHeaderIndex_(header, 'SchoolID', 2);
+    const volunteerEmailCol = findHeaderIndex_(header, 'VolunteerEmail', 3);
+    const typeCol = findHeaderIndex_(header, 'Type', 4);
+    const kpiIdCol = findHeaderIndex_(header, 'KPI_ID', 5);
+    const scoreCol = findHeaderIndex_(header, 'Score', 6);
+    const statusCol = findHeaderIndex_(header, 'Status', 7);
+    const timestampCol = findHeaderIndex_(header, 'Timestamp', 8);
+    const assessmentColumnCount = Math.max(
+      header.length,
+      assessmentIdCol + 1,
+      studentIdCol + 1,
+      schoolIdCol + 1,
+      volunteerEmailCol + 1,
+      typeCol + 1,
+      kpiIdCol + 1,
+      scoreCol + 1,
+      statusCol + 1,
+      timestampCol + 1,
+      deletedCol + 1
+    );
 
-    // Fall back to previously hardcoded positions if header names are not found.
-    // Logs a clear warning so this is visible in execution logs.
+    function buildAssessmentRow_(item, kpiId, score, status, assessmentTimestamp, existingRow) {
+      const row = existingRow ? existingRow.slice() : new Array(assessmentColumnCount).fill('');
+      while (row.length < assessmentColumnCount) row.push('');
+      if (!row[assessmentIdCol]) row[assessmentIdCol] = generateUniqueId();
+      row[studentIdCol] = item.studentId;
+      row[schoolIdCol] = item.schoolId;
+      row[volunteerEmailCol] = user.email;
+      row[typeCol] = item.assessmentType;
+      row[kpiIdCol] = kpiId || '';
+      row[scoreCol] = score || '';
+      row[statusCol] = status;
+      row[timestampCol] = assessmentTimestamp;
+      row[deletedCol] = '';
+      return row;
+    }
+
+    const aStudentIdCol = findHeaderIndex_(header, 'StudentID', -1);
+    const aSchoolIdCol  = findHeaderIndex_(header, 'SchoolID', -1);
+    const aTypeCol      = findHeaderIndex_(header, 'Type', -1);
+    const aKpiIdCol     = findHeaderIndex_(header, 'KPI_ID', -1);
     const useStudentCol = aStudentIdCol !== -1 ? aStudentIdCol : 1;
     const useSchoolCol  = aSchoolIdCol  !== -1 ? aSchoolIdCol  : 2;
     const useTypeCol    = aTypeCol      !== -1 ? aTypeCol      : 4;
+    const useKpiCol     = aKpiIdCol     !== -1 ? aKpiIdCol     : 5;
 
     if (aStudentIdCol === -1 || aSchoolIdCol === -1 || aTypeCol === -1) {
       Logger.log('[WARNING] saveAssessments: Could not detect Assessments column positions by header name. ' +
@@ -1029,36 +1098,71 @@ function saveAssessments(token, assessmentData) {
         '. This may cause incorrect row deletion if columns have been reordered.');
     }
 
-    const rowsToDelete = [];
+    const existingByTarget = {};
     const allRows = allData.slice(1);
     for (let i = 0; i < allRows.length; i++) {
       const row = allRows[i];
+      if (isDeletedRow_(row, deletedCol)) continue;
       const key = `${row[useStudentCol]}|${row[useSchoolCol]}|${row[useTypeCol]}`;
-      if (toDelete.has(key)) {
-        rowsToDelete.push(i + 2); // +2: 1-indexed and +1 for header row
+      if (targetKeys.has(key)) {
+        if (!existingByTarget[key]) existingByTarget[key] = [];
+        existingByTarget[key].push({ rowNum: i + 2, row, kpiId: String(row[useKpiCol] || '') });
       }
     }
 
-    // SAFETY GUARD: Sanity-check the number of rows about to be deleted.
-    // Each student can have at most one row per KPI (~20 KPIs max) plus one Absent row.
-    // Deleting far more than that strongly suggests a column-detection or data mismatch bug.
-    const maxSafeDeletes = assessmentData.length * 25;
-    if (rowsToDelete.length > maxSafeDeletes) {
-      throw new Error(
-        `Safety check failed: about to delete ${rowsToDelete.length} assessment rows for only ` +
-        `${assessmentData.length} students. Exceeds safe threshold of ${maxSafeDeletes}. ` +
-        `Operation aborted to prevent data loss. Please contact support.`
-      );
-    }
+    const rowsToUpdate = [];
+    const rowsToSoftDelete = [];
+    const newRows = [];
+    assessmentData.forEach(item => {
+      const targetKey = `${item.studentId}|${item.schoolId}|${item.assessmentType}`;
+      const existingRows = existingByTarget[targetKey] || [];
+      const unusedExistingRows = existingRows.slice();
+      const assessmentTimestamp = parseAssessmentDate(item.assessmentDate);
 
-    Logger.log('saveAssessments: deleting ' + rowsToDelete.length + ' old rows, appending ' +
-      newRows.length + ' new rows. schoolId=' + Array.from(schoolIds).join(','));
+      if (item.status === 'Absent') {
+        const existing = unusedExistingRows.shift();
+        if (existing) {
+          rowsToUpdate.push({
+            rowNum: existing.rowNum,
+            row: buildAssessmentRow_(item, '', '', 'Absent', assessmentTimestamp, existing.row)
+          });
+        } else {
+          newRows.push(buildAssessmentRow_(item, '', '', 'Absent', assessmentTimestamp));
+        }
+      } else {
+        (item.scores || []).forEach(s => {
+          const score = parseInt(s.score, 10);
+          if (score < 1 || score > 5) return;
+          const desiredKpiId = String(s.kpiId || '');
+          const existingIndex = unusedExistingRows.findIndex(existing => String(existing.kpiId) === desiredKpiId);
+          if (existingIndex !== -1) {
+            const existing = unusedExistingRows.splice(existingIndex, 1)[0];
+            rowsToUpdate.push({
+              rowNum: existing.rowNum,
+              row: buildAssessmentRow_(item, s.kpiId, score, 'Present', assessmentTimestamp, existing.row)
+            });
+          } else {
+            newRows.push(buildAssessmentRow_(item, s.kpiId, score, 'Present', assessmentTimestamp));
+          }
+        });
+      }
 
-    // DELETE OLD RECORDS: Delete contiguous row groups in reverse order to reduce
-    // Apps Script calls while still preventing row index shifting.
-    const deleteGroups = groupConsecutiveRows_(rowsToDelete);
-    for (let i = deleteGroups.length - 1; i >= 0; i--) {
-      sheet.deleteRows(deleteGroups[i].start, deleteGroups[i].count);
+      unusedExistingRows.forEach(existing => rowsToSoftDelete.push(existing.rowNum));
+    });
+
+    Logger.log('saveAssessments: updating ' + rowsToUpdate.length + ', soft-deleting ' +
+      rowsToSoftDelete.length + ', appending ' + newRows.length + ' rows. schoolId=' +
+      Array.from(schoolIds).join(','));
+
+    rowsToUpdate.forEach(update => {
+      sheet.getRange(update.rowNum, 1, 1, assessmentColumnCount).setValues([update.row]);
+    });
+
+    if (rowsToSoftDelete.length) {
+      const deletedAt = new Date().toISOString();
+      rowsToSoftDelete.forEach(rowNum => {
+        sheet.getRange(rowNum, deletedCol + 1).setValue(deletedAt);
+      });
     }
     
     // APPEND NEW RECORDS: write all rows in one batch instead of appendRow per KPI.
@@ -1075,6 +1179,14 @@ function saveAssessments(token, assessmentData) {
       status: 'SUCCESS',
       backupSheet: backupSheetName
     });
+
+    sendTransactionEmail_('ASSESSMENTS_SAVED', {
+      user: user.email,
+      schoolIds: Array.from(schoolIds),
+      recordCount: rowsToUpdate.length + newRows.length,
+      assessmentTypes: Array.from(new Set(assessmentData.map(item => item.assessmentType))),
+      details: 'Updated: ' + rowsToUpdate.length + ', Appended: ' + newRows.length + ', Soft-deleted: ' + rowsToSoftDelete.length
+    });
     
     return { success: true, message: 'Assessments saved successfully!' };
   } catch (e) {
@@ -1089,16 +1201,11 @@ function saveAssessments(token, assessmentData) {
       status: 'FAILED'
     });
     
-    // Attempt recovery
+    // Do not auto-restore here: restoring clears and rewrites the whole
+    // Assessments sheet, which is riskier than leaving the failed save untouched.
     if (backupSheetName) {
-      try {
-        Logger.log('Attempting recovery from backup: ' + backupSheetName);
-        restoreFromBackup_(backupSheetName, SHEETS.ASSESSMENTS);
-        return { success: false, message: 'An error occurred. Data recovered from backup. ' + e.message };
-      } catch (recoveryError) {
-        Logger.log('[CRITICAL] Recovery failed: ' + recoveryError);
-        return { success: false, message: 'Critical error: ' + e.message + '. Please contact support.' };
-      }
+      Logger.log('Automatic recovery skipped for safety. Backup available: ' + backupSheetName);
+      return { success: false, message: 'An error occurred. No automatic sheet restore was attempted. Backup available: ' + backupSheetName + '. ' + e.message };
     }
     
     return { success: false, message: e.message };
@@ -1399,6 +1506,13 @@ function saveOrUpdateStudents(token, students, schoolId) {
       backupSheet: backupSheetName,
       details: 'New: ' + updatedCount.new + ', Updated: ' + updatedCount.updated
     });
+
+    sendTransactionEmail_('STUDENTS_SAVED', {
+      user: user.email,
+      schoolId,
+      recordCount: updatedCount.new + updatedCount.updated,
+      details: 'New: ' + updatedCount.new + ', Updated: ' + updatedCount.updated
+    });
     
     return { success: true, message: 'Students saved successfully! (New: ' + updatedCount.new + ', Updated: ' + updatedCount.updated + ')' };
   } catch (e) {
@@ -1415,16 +1529,11 @@ function saveOrUpdateStudents(token, students, schoolId) {
       status: 'FAILED'
     });
     
-    // Attempt recovery if backup exists
+    // Do not auto-restore here: restoring clears and rewrites the whole
+    // Students sheet, which is riskier than leaving the failed save untouched.
     if (backupSheetName) {
-      try {
-        Logger.log('Attempting automatic recovery from backup: ' + backupSheetName);
-        restoreFromBackup_(backupSheetName, SHEETS.STUDENTS);
-        return { success: false, message: 'An error occurred. Data has been automatically recovered from backup. ' + e.message };
-      } catch (recoveryError) {
-        Logger.log('[CRITICAL] Recovery failed: ' + recoveryError);
-        return { success: false, message: 'Critical error: ' + e.message + '. Please contact support immediately and reference backup: ' + backupSheetName };
-      }
+      Logger.log('Automatic recovery skipped for safety. Backup available: ' + backupSheetName);
+      return { success: false, message: 'An error occurred. No automatic sheet restore was attempted. Backup available: ' + backupSheetName + '. ' + e.message };
     }
     
     return { success: false, message: e.message };
@@ -1443,12 +1552,14 @@ function canDeleteStudent(token, studentId) {
   if (lastRow <= 1) return { canDelete: true };
 
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] || [];
-  const studentIdCol = headers.indexOf('StudentID');
+  const studentIdCol = findHeaderIndex_(headers, 'StudentID', -1);
+  const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
   if (studentIdCol === -1) throw new Error('StudentID column missing in Assessments sheet.');
 
-  const studentIds = sheet.getRange(2, studentIdCol + 1, lastRow - 1, 1).getValues();
+  const width = Math.max(studentIdCol + 1, deletedCol + 1);
+  const assessmentRows = sheet.getRange(2, 1, lastRow - 1, width).getValues();
   const targetId = String(studentId);
-  if (studentIds.some(row => String(row[0]) === targetId)) {
+  if (assessmentRows.some(row => !isDeletedRow_(row, deletedCol) && String(row[studentIdCol]) === targetId)) {
     return { canDelete: false, reason: 'Assessment records exist for this student. Please delete assessment records first.' };
   }
   return { canDelete: true };
@@ -1483,17 +1594,17 @@ function deleteStudent(token, studentId) {
             schoolId,
             method: 'soft_delete'
           });
+
+          sendTransactionEmail_('STUDENT_DELETED', {
+            user: user.email,
+            schoolId,
+            studentId,
+            recordCount: 1,
+            details: 'Student Name: ' + studentName + ', Method: soft_delete'
+          });
         }
       } else {
-        // Hard delete: completely remove row
-        sheet.deleteRow(i + 1);
-        createAuditLog_('STUDENT_DELETED', {
-          user: user.email,
-          studentId,
-          studentName,
-          schoolId,
-          method: 'hard_delete'
-        });
+        throw new Error('Student hard delete is disabled for data safety. Enable soft deletes before deleting students.');
       }
       
       invalidateStudentsCache_(schoolId);
@@ -1517,6 +1628,8 @@ function getDashboardStats(user) {
     const schoolsData = getCachedSheetValues_(SHEETS.SCHOOLS);
     const studentsData = getCachedSheetValues_(SHEETS.STUDENTS);
     const assessmentsData = getCachedSheetValues_(SHEETS.ASSESSMENTS);
+    const assessmentHeaders = assessmentsData[0] || [];
+    const assessmentDeletedCol = findHeaderIndex_(assessmentHeaders, '_Deleted', -1);
     
     const scopedSchools = filterSchoolsByScope_(schoolsData.slice(1), user);
     const scopedSchoolIds = new Set(scopedSchools.map(s => s[0]));
@@ -1524,7 +1637,10 @@ function getDashboardStats(user) {
     // Get SchoolID column index for Students sheet
     const studentHeaders = studentsData[0] || [];
     const schoolIdCol = studentHeaders.indexOf('SchoolID');
-    const scopedStudents = studentsData.slice(1).filter(r => scopedSchoolIds.has(schoolIdCol === -1 ? r[2] : r[schoolIdCol]));
+    const studentDeletedCol = findHeaderIndex_(studentHeaders, '_Deleted', -1);
+    const scopedStudents = studentsData.slice(1).filter(r =>
+      !isDeletedRow_(r, studentDeletedCol) && scopedSchoolIds.has(schoolIdCol === -1 ? r[2] : r[schoolIdCol])
+    );
     const assessedSchoolIdsByType = {
       Baseline: new Set(),
       Midline: new Set(),
@@ -1532,6 +1648,7 @@ function getDashboardStats(user) {
     };
 
     assessmentsData.slice(1).forEach(row => {
+      if (isDeletedRow_(row, assessmentDeletedCol)) return;
       const schoolId = row[2];
       const assessmentType = row[4];
       const status = row[7];
