@@ -1,6 +1,17 @@
 // --- CONFIGURATION ---
 const SPREADSHEET_ID = '18q5INWS_gwKkDLIJAtDpQC6Ei-rXN6KBwKhARzfWnDw';
-const SS = SpreadsheetApp.openById(SPREADSHEET_ID);
+let _ssInstance = null;
+function getSpreadsheetApp_() {
+  if (!_ssInstance) _ssInstance = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return _ssInstance;
+}
+const SS = new Proxy({}, {
+  get: (_, prop) => {
+    const ss = getSpreadsheetApp_();
+    const val = ss[prop];
+    return typeof val === 'function' ? val.bind(ss) : val;
+  }
+});
 const SESSION_TTL_SECONDS = 21600; // 6 hours
 
 const SHEETS = {
@@ -188,22 +199,57 @@ function removeCached_(key) {
   }
 }
 
-function getCachedSheetValues_(sheetName) {
-  const key = 'sheet:' + sheetName;
-  const cached = getCachedJson_(key);
-  Logger.log('getCachedSheetValues_: key=' + key + ' cacheHit=' + (!!cached));
-  if (cached) {
-    Logger.log('getCachedSheetValues_: cache hit for ' + sheetName + ' rows=' + (cached ? cached.length : 0));
-    return cached;
+function getSheetValuesFast_(sheetName) {
+  try {
+    if (typeof Sheets !== 'undefined' && Sheets && Sheets.Spreadsheets && Sheets.Spreadsheets.Values) {
+      const safeSheetName = String(sheetName).replace(/'/g, "''");
+      const res = Sheets.Spreadsheets.Values.get(SPREADSHEET_ID, `'${safeSheetName}'`, {
+        valueRenderOption: 'FORMATTED_VALUE',
+        dateTimeRenderOption: 'FORMATTED_STRING'
+      });
+      const rows = res.values;
+      if (rows && rows.length > 0) {
+        let maxCols = 0;
+        for (let i = 0; i < rows.length; i++) {
+          if (rows[i].length > maxCols) maxCols = rows[i].length;
+        }
+        for (let i = 0; i < rows.length; i++) {
+          while (rows[i].length < maxCols) rows[i].push('');
+        }
+        return rows;
+      }
+      return [];
+    }
+  } catch (e) {
+    Logger.log('[Sheets API Fallback] getSheetValuesFast_ exception for ' + sheetName + ': ' + e + '. Falling back to SpreadsheetApp.');
   }
+
   const sheet = SS.getSheetByName(sheetName);
   if (!sheet) {
-    Logger.log('getCachedSheetValues_: sheet not found: ' + sheetName);
+    Logger.log('getSheetValuesFast_: sheet not found: ' + sheetName);
     return [];
   }
-  const values = sheet.getDataRange().getValues();
-  Logger.log('getCachedSheetValues_: loaded ' + values.length + ' rows from sheet ' + sheetName);
-  putCachedJson_(key, values, DATA_CACHE_TTL_SECONDS);
+  return sheet.getDataRange().getValues();
+}
+
+function getCachedSheetValues_(sheetName) {
+  const isLargeTable = sheetName === SHEETS.STUDENTS || sheetName === SHEETS.ASSESSMENTS;
+  const key = 'sheet:' + sheetName;
+
+  if (!isLargeTable) {
+    const cached = getCachedJson_(key);
+    if (cached) {
+      Logger.log('getCachedSheetValues_: cache hit for ' + sheetName + ' rows=' + cached.length);
+      return cached;
+    }
+  }
+
+  const values = getSheetValuesFast_(sheetName);
+  Logger.log('getCachedSheetValues_: loaded ' + values.length + ' rows from sheet ' + sheetName + ' (isLarge=' + isLargeTable + ')');
+  
+  if (!isLargeTable) {
+    putCachedJson_(key, values, DATA_CACHE_TTL_SECONDS);
+  }
   return values;
 }
 
@@ -214,6 +260,11 @@ function invalidateSheetCache_(sheetName) {
 function invalidateStudentsCache_(schoolId) {
   invalidateSheetCache_(SHEETS.STUDENTS);
   if (schoolId) removeCached_('studentsForSchool:' + schoolId);
+}
+
+function invalidateAssessmentsCache_(schoolId) {
+  invalidateSheetCache_(SHEETS.ASSESSMENTS);
+  if (schoolId) removeCached_('assessmentsForSchool:' + schoolId);
 }
 
 function invalidateVolunteerCache_() {
@@ -820,27 +871,25 @@ function getStudentsForSchool_(schoolId) {
 function getExistingAssessmentTypes(token, studentId) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
-  ensureStudentAccess_(user, studentId);
-  const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
-  const headers = data[0] || [];
-  const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
-  const types = new Set();
-  for (let i = 1; i < data.length; i++) {
-    if (!isDeletedRow_(data[i], deletedCol) && data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
-  }
+  const studentRow = ensureStudentAccess_(user, studentId);
+  const schoolId = studentRow[2];
+  const types = getAssessmentTypesForStudent_(studentId, schoolId);
   return Array.from(types);
 }
 
 function getExistingAssessmentScores(token, studentId, assessmentType) {
   const user = getSessionUser(token);
   ensurePermission_(canAssess_(user), 'Authorization failed.');
-  ensureStudentAccess_(user, studentId);
-  const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
-  const headers = data[0] || [];
-  const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
+  const studentRow = ensureStudentAccess_(user, studentId);
+  const schoolId = studentRow[2];
+  const schoolAssessments = getAssessmentsForSchool_(schoolId);
+  const data = schoolAssessments.rows || [];
   const scores = [];
-  for (let i = 1; i < data.length; i++) {
-    if (!isDeletedRow_(data[i], deletedCol) && data[i][1] == studentId && data[i][4] === assessmentType && data[i][7] === 'Present') scores.push({ kpiId: data[i][5], score: data[i][6] });
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[1]) === String(studentId) && row[4] === assessmentType && row[7] === 'Present') {
+      scores.push({ kpiId: row[5], score: row[6] });
+    }
   }
   return scores;
 }
@@ -848,23 +897,20 @@ function getExistingAssessmentScores(token, studentId, assessmentType) {
 function getExistingAssessmentDataForClass(token, schoolId, classValue, assessmentType) {
   const user = getSessionUser(token);
   ensureSchoolAccess_(user, schoolId);
-  const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
-  const assessmentHeaders = data[0] || [];
-  const deletedCol = findHeaderIndex_(assessmentHeaders, '_Deleted', -1);
-  const studentsData = getCachedSheetValues_(SHEETS.STUDENTS);
-  const headers = studentsData[0] || [];
-  const idCol = headers.indexOf('StudentID');
-  const classCol = headers.indexOf('Class');
-  const schoolIdCol = headers.indexOf('SchoolID');
+  const schoolAssessments = getAssessmentsForSchool_(schoolId);
+  const data = schoolAssessments.rows || [];
+  const students = getStudentsForSchool_(schoolId);
   const studentClassMap = {};
-  for (let i = 1; i < studentsData.length; i++) if (studentsData[i][idCol] && studentsData[i][schoolIdCol] == schoolId) studentClassMap[studentsData[i][idCol]] = studentsData[i][classCol];
+  students.forEach(s => {
+    if (s.studentId) studentClassMap[s.studentId] = s.class;
+  });
   const result = {};
-  for (let i = 1; i < data.length; i++) {
-    if (isDeletedRow_(data[i], deletedCol)) continue;
-    const studentId = data[i][1];
-    if (data[i][2] == schoolId && data[i][4] === assessmentType && studentClassMap[studentId] == classValue) {
-      if (!result[studentId]) result[studentId] = { status: data[i][7], scores: [] };
-      if (data[i][7] === 'Present' && data[i][5]) result[studentId].scores.push({ kpiId: data[i][5], score: data[i][6] });
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    const studentId = row[1];
+    if (row[4] === assessmentType && String(studentClassMap[studentId]).trim() === String(classValue).trim()) {
+      if (!result[studentId]) result[studentId] = { status: row[7], scores: [] };
+      if (row[7] === 'Present' && row[5]) result[studentId].scores.push({ kpiId: row[5], score: row[6] });
     }
   }
   return result;
@@ -887,6 +933,30 @@ function findHeaderIndex_(headers, columnName, fallbackIndex) {
 
 function isDeletedRow_(row, deletedCol) {
   return deletedCol !== -1 && !!row[deletedCol];
+}
+
+function getAssessmentsForSchool_(schoolId) {
+  const key = 'assessmentsForSchool:' + schoolId;
+  const cached = getCachedJson_(key);
+  if (cached) return cached;
+
+  const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
+  const headers = data[0] || [];
+  const schoolIdCol = findHeaderIndex_(headers, 'SchoolID', 2);
+  const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
+
+  const schoolRows = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (isDeletedRow_(row, deletedCol)) continue;
+    if (String(row[schoolIdCol]) === String(schoolId)) {
+      schoolRows.push(row);
+    }
+  }
+
+  const result = { headers, rows: schoolRows };
+  putCachedJson_(key, result, DATA_CACHE_TTL_SECONDS);
+  return result;
 }
 
 function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
@@ -916,7 +986,7 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   // Enforce prerequisite rules (consider existing assessments only)
   const prerequisite = getAssessmentPrerequisite(assessmentType);
   if (prerequisite) {
-    const types = getAssessmentTypesForStudent_(students[0].studentId);
+    const types = getAssessmentTypesForStudent_(students[0].studentId, schoolId);
     if (!types.has(prerequisite)) {
       Logger.log('getAssessmentGridData: prerequisite missing for ' + assessmentType + ' student=' + students[0].studentId + ' need=' + prerequisite);
       throw new Error(`A ${prerequisite} assessment must be completed before a ${assessmentType} can be entered.`);
@@ -924,17 +994,16 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   }
 
   const kpis = getKpis_();
-  const assessments = getCachedSheetValues_(SHEETS.ASSESSMENTS);
-  const assessmentHeaders = assessments[0] || [];
+  const schoolAssessments = getAssessmentsForSchool_(schoolId);
+  const assessmentHeaders = schoolAssessments.headers || [];
   const timestampCol = findHeaderIndex_(assessmentHeaders, 'Timestamp', 8);
-  const deletedCol = findHeaderIndex_(assessmentHeaders, '_Deleted', -1);
+  const assessments = schoolAssessments.rows || [];
   const result = {};
   let assessmentDate = '';
-  for (let i = 1; i < assessments.length; i++) {
+  for (let i = 0; i < assessments.length; i++) {
     const row = assessments[i];
-    if (isDeletedRow_(row, deletedCol)) continue;
     const studentId = row[1];
-    if (row[2] == schoolId && row[4] === assessmentType && String(studentClassMap[studentId]).trim() === String(classValue).trim()) {
+    if (row[4] === assessmentType && String(studentClassMap[studentId]).trim() === String(classValue).trim()) {
       if (!assessmentDate) assessmentDate = formatAssessmentDateForClient_(row[timestampCol]);
       if (!result[studentId]) result[studentId] = { status: row[7], scores: [] };
       if (row[7] === 'Present' && row[5]) result[studentId].scores.push({ kpiId: row[5], score: row[6] });
@@ -944,13 +1013,24 @@ function getAssessmentGridData(token, schoolId, classValue, assessmentType) {
   return { students, allStudentsForSchool, kpis, existingDataMap: result, assessmentDate: assessmentDate || null };
 }
 
-function getAssessmentTypesForStudent_(studentId) {
-  const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
-  const headers = data[0] || [];
-  const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
+function getAssessmentTypesForStudent_(studentId, schoolId) {
+  let rows = [];
+  if (schoolId) {
+    const schoolAssessments = getAssessmentsForSchool_(schoolId);
+    rows = schoolAssessments.rows || [];
+  } else {
+    const data = getCachedSheetValues_(SHEETS.ASSESSMENTS);
+    const headers = data[0] || [];
+    const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
+    for (let i = 1; i < data.length; i++) {
+      if (!isDeletedRow_(data[i], deletedCol)) rows.push(data[i]);
+    }
+  }
   const types = new Set();
-  for (let i = 1; i < data.length; i++) {
-    if (!isDeletedRow_(data[i], deletedCol) && data[i][1] == studentId && data[i][7] === 'Present') types.add(data[i][4]);
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][1]) === String(studentId) && rows[i][7] === 'Present') {
+      types.add(rows[i][4]);
+    }
   }
   return types;
 }
@@ -1020,7 +1100,7 @@ function saveAssessments(token, assessmentData) {
     // Build a map of existing assessment types per student for prerequisite validation
     const existingTypesMap = {};
     assessmentData.forEach(item => {
-      if (!existingTypesMap[item.studentId]) existingTypesMap[item.studentId] = getAssessmentTypesForStudent_(item.studentId);
+      if (!existingTypesMap[item.studentId]) existingTypesMap[item.studentId] = getAssessmentTypesForStudent_(item.studentId, item.schoolId);
     });
 
     // Add types being created in this payload
@@ -1171,6 +1251,7 @@ function saveAssessments(token, assessmentData) {
     }
     
     invalidateSheetCache_(SHEETS.ASSESSMENTS);
+    schoolIds.forEach(id => invalidateAssessmentsCache_(id));
     
     createAuditLog_('ASSESSMENTS_SAVED', {
       user: user.email,
@@ -1546,22 +1627,14 @@ function saveOrUpdateStudents(token, students, schoolId) {
 function canDeleteStudent(token, studentId) {
   const user = getSessionUser(token);
   ensurePermission_(canManageStudents_(user), 'Authorization failed.');
-  ensureStudentAccess_(user, studentId);
-  const sheet = SS.getSheetByName(SHEETS.ASSESSMENTS);
-  if (!sheet) return { canDelete: true };
-
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return { canDelete: true };
-
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] || [];
-  const studentIdCol = findHeaderIndex_(headers, 'StudentID', -1);
-  const deletedCol = findHeaderIndex_(headers, '_Deleted', -1);
-  if (studentIdCol === -1) throw new Error('StudentID column missing in Assessments sheet.');
-
-  const width = Math.max(studentIdCol + 1, deletedCol + 1);
-  const assessmentRows = sheet.getRange(2, 1, lastRow - 1, width).getValues();
+  const studentRow = ensureStudentAccess_(user, studentId);
+  const schoolId = studentRow[2];
+  const schoolAssessments = getAssessmentsForSchool_(schoolId);
+  const assessmentRows = schoolAssessments.rows || [];
+  const headers = schoolAssessments.headers || [];
+  const studentIdCol = findHeaderIndex_(headers, 'StudentID', 1);
   const targetId = String(studentId);
-  if (assessmentRows.some(row => !isDeletedRow_(row, deletedCol) && String(row[studentIdCol]) === targetId)) {
+  if (assessmentRows.some(row => String(row[studentIdCol]) === targetId)) {
     return { canDelete: false, reason: 'Assessment records exist for this student. Please delete assessment records first.' };
   }
   return { canDelete: true };
