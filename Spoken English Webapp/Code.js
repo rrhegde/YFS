@@ -1,4 +1,4 @@
-﻿// --- CONFIGURATION ---
+// --- CONFIGURATION ---
 const SPREADSHEET_ID = '18q5INWS_gwKkDLIJAtDpQC6Ei-rXN6KBwKhARzfWnDw';
 const SS = SpreadsheetApp.openById(SPREADSHEET_ID);
 const SESSION_TTL_SECONDS = 21600; // 6 hours
@@ -1416,6 +1416,7 @@ function saveOrUpdateStudents(token, students, schoolId) {
     
     const headers = allData[0];
     const idCol = headers.indexOf('StudentID'), nameCol = headers.indexOf('StudentName'), classCol = headers.indexOf('Class'), genderCol = headers.indexOf('Gender'), schoolIdCol = headers.indexOf('SchoolID');
+    const updatedDateCol = headers.indexOf('Updated_Date_Time');
     
     // Validate columns
     if ([idCol, nameCol, classCol, genderCol, schoolIdCol].includes(-1)) {
@@ -1457,6 +1458,7 @@ function saveOrUpdateStudents(token, students, schoolId) {
           row[nameCol] = s.studentName;
           row[classCol] = s.class;
           row[genderCol] = s.gender || '';
+          if (updatedDateCol !== -1) row[updatedDateCol] = ts;
           if (deletedCol !== -1) row[deletedCol] = ''; // Clear deleted marker if re-activating
           updates.push({ rowNum: i + 2, values: [row] }); // +2 because sheet is 1-indexed and we skip header
           updatedCount.updated++;
@@ -1474,7 +1476,7 @@ function saveOrUpdateStudents(token, students, schoolId) {
       row[schoolIdCol] = schoolId;
       row[classCol] = s.class;
       row[genderCol] = s.gender || '';
-      if (headers.length > 4) row[4] = ts;
+      if (updatedDateCol !== -1) row[updatedDateCol] = ts;
       if (deletedCol !== -1) row[deletedCol] = '';
       newRows.push(row);
       updatedCount.new++;
