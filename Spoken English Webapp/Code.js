@@ -260,11 +260,13 @@ function invalidateSheetCache_(sheetName) {
 function invalidateStudentsCache_(schoolId) {
   invalidateSheetCache_(SHEETS.STUDENTS);
   if (schoolId) removeCached_('studentsForSchool:' + schoolId);
+  invalidateDashboardStatsCache_();
 }
 
 function invalidateAssessmentsCache_(schoolId) {
   invalidateSheetCache_(SHEETS.ASSESSMENTS);
   if (schoolId) removeCached_('assessmentsForSchool:' + schoolId);
+  invalidateDashboardStatsCache_();
 }
 
 function invalidateVolunteerCache_() {
@@ -837,7 +839,41 @@ function getStudentsForSchool(token, schoolId) {
   return getStudentsForSchool_(schoolId);
 }
 
-function getStudentsBySchool(token, schoolId) { return getStudentsForSchool(token, schoolId); }
+function getStudentsBySchool(token, schoolId, options) {
+  const user = getSessionUser(token);
+  ensurePermission_(canAssess_(user) || canManageStudents_(user), 'Authorization failed.');
+  ensureSchoolAccess_(user, schoolId);
+
+  options = options || {};
+  const requestedPageSize = parseInt(options.pageSize, 10) || 50;
+  const pageSize = Math.max(10, Math.min(requestedPageSize, 100));
+  const searchQuery = String(options.searchQuery || '').trim().toLowerCase();
+  const classFilter = String(options.classFilter || '').trim();
+  const students = getStudentsForSchool_(schoolId);
+  const classes = Array.from(new Set(students.map(s => String(s.class || '').trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+  const filtered = students.filter(student => {
+    if (classFilter && String(student.class || '').trim() !== classFilter) return false;
+    if (!searchQuery) return true;
+    return [student.studentId, student.studentName, student.class, student.gender]
+      .some(value => String(value || '').toLowerCase().includes(searchQuery));
+  });
+  const totalCount = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const requestedPage = parseInt(options.page, 10) || 1;
+  const page = Math.min(Math.max(1, requestedPage), totalPages);
+  const start = (page - 1) * pageSize;
+
+  return {
+    students: filtered.slice(start, start + pageSize),
+    totalCount,
+    page,
+    pageSize,
+    totalPages,
+    classes
+  };
+}
 
 function getClassesForSchool(token, schoolId) {
   const students = getStudentsForSchool(token, schoolId);
@@ -1317,6 +1353,7 @@ function addSchool(token, schoolData) {
   const newId = 'SCH-' + new Date().getTime();
   sheet.appendRow([newId, schoolData.name, schoolData.region, schoolData.chapter, schoolData.taluk, schoolData.district, schoolData.strength]);
   invalidateSheetCache_(SHEETS.SCHOOLS);
+  invalidateDashboardStatsCache_();
   return { success: true, message: 'School added successfully!', school: { id: newId, name: schoolData.name, region: schoolData.region, chapter: schoolData.chapter, taluk: schoolData.taluk, district: schoolData.district, strength: schoolData.strength } };
 }
 
@@ -1436,7 +1473,12 @@ function deleteSchool(token, schoolId) {
   if (!validation.canDelete) return { success: false, message: validation.reason };
   const sheet = SS.getSheetByName(SHEETS.SCHOOLS);
   const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) if (data[i][0] === schoolId) { sheet.deleteRow(i + 1); invalidateSheetCache_(SHEETS.SCHOOLS); return { success: true }; }
+  for (let i = 1; i < data.length; i++) if (data[i][0] === schoolId) {
+    sheet.deleteRow(i + 1);
+    invalidateSheetCache_(SHEETS.SCHOOLS);
+    invalidateDashboardStatsCache_();
+    return { success: true };
+  }
   return { success: false, message: 'School not found.' };
 }
 
@@ -1697,13 +1739,45 @@ function generateUniqueId() {
 //  OPTIMIZED DATA LOADING
 // ─────────────────────────────────────────────────────────────────────────────
 const CACHE_VERSION = '1.0';
+const DASHBOARD_CACHE_TTL_SECONDS = 300;
+const DASHBOARD_CACHE_VERSION_PROPERTY = 'dashboardStatsCacheVersion';
+
+function getDashboardStatsCacheVersion_() {
+  return PropertiesService.getScriptProperties().getProperty(DASHBOARD_CACHE_VERSION_PROPERTY) || '1';
+}
+
+function invalidateDashboardStatsCache_() {
+  try {
+    const nextVersion = String(Number(getDashboardStatsCacheVersion_()) + 1);
+    PropertiesService.getScriptProperties().setProperty(DASHBOARD_CACHE_VERSION_PROPERTY, nextVersion);
+  } catch (e) {
+    Logger.log('Dashboard cache invalidation skipped: ' + e);
+  }
+}
+
+function getDashboardScopeCacheKey_(user) {
+  if (isAdmin_(user)) return 'pan-india';
+  if (isSupervisor_(user)) return 'region:' + String(user.assignedRegion || '').trim().toLowerCase();
+  if (isCoordinator_(user)) {
+    return 'chapter:' + String(user.assignedRegion || '').trim().toLowerCase() + ':' +
+      String(user.assignedChapter || '').trim().toLowerCase();
+  }
+  return 'user:' + String(user.email || '').trim().toLowerCase();
+}
 
 function getDashboardStats(user) {
   try {
+    const cacheKey = 'dashboardStats:' + CACHE_VERSION + ':' + getDashboardStatsCacheVersion_() + ':' + getDashboardScopeCacheKey_(user);
+    const cached = getCachedJson_(cacheKey);
+    if (cached) return cached;
+
     const schoolsData = getCachedSheetValues_(SHEETS.SCHOOLS);
     const studentsData = getCachedSheetValues_(SHEETS.STUDENTS);
     const assessmentsData = getCachedSheetValues_(SHEETS.ASSESSMENTS);
     const assessmentHeaders = assessmentsData[0] || [];
+    const assessmentSchoolIdCol = findHeaderIndex_(assessmentHeaders, 'SchoolID', 2);
+    const assessmentTypeCol = findHeaderIndex_(assessmentHeaders, 'Type', 4);
+    const assessmentStatusCol = findHeaderIndex_(assessmentHeaders, 'Status', 7);
     const assessmentDeletedCol = findHeaderIndex_(assessmentHeaders, '_Deleted', -1);
     
     const scopedSchools = filterSchoolsByScope_(schoolsData.slice(1), user);
@@ -1711,7 +1785,7 @@ function getDashboardStats(user) {
     
     // Get SchoolID column index for Students sheet
     const studentHeaders = studentsData[0] || [];
-    const schoolIdCol = studentHeaders.indexOf('SchoolID');
+    const schoolIdCol = findHeaderIndex_(studentHeaders, 'SchoolID', 2);
     const studentDeletedCol = findHeaderIndex_(studentHeaders, '_Deleted', -1);
     const scopedStudents = studentsData.slice(1).filter(r =>
       !isDeletedRow_(r, studentDeletedCol) && scopedSchoolIds.has(schoolIdCol === -1 ? r[2] : r[schoolIdCol])
@@ -1724,20 +1798,22 @@ function getDashboardStats(user) {
 
     assessmentsData.slice(1).forEach(row => {
       if (isDeletedRow_(row, assessmentDeletedCol)) return;
-      const schoolId = row[2];
-      const assessmentType = row[4];
-      const status = row[7];
+      const schoolId = row[assessmentSchoolIdCol];
+      const assessmentType = row[assessmentTypeCol];
+      const status = row[assessmentStatusCol];
       if (!scopedSchoolIds.has(schoolId) || !assessedSchoolIdsByType[assessmentType] || status !== 'Present') return;
       assessedSchoolIdsByType[assessmentType].add(schoolId);
     });
-    
-    return {
+
+    const stats = {
       totalSchools: scopedSchools.length,
       totalStudents: scopedStudents.length,
       baselineDone: assessedSchoolIdsByType.Baseline.size,
       midlineDone: assessedSchoolIdsByType.Midline.size,
       endlineDone: assessedSchoolIdsByType.Endline.size
     };
+    putCachedJson_(cacheKey, stats, DASHBOARD_CACHE_TTL_SECONDS);
+    return stats;
   } catch (e) {
     Logger.log('Error computing dashboard stats: ' + e);
     return { totalSchools: 0, totalStudents: 0, baselineDone: 0, midlineDone: 0, endlineDone: 0 };
