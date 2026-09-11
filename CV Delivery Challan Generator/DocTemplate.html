@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    @page { size: A4; margin: 20mm; }
+    body { font-family: Arial, sans-serif; font-size: 11pt; color: #333; line-height: 1.4; margin: 0; }
+    
+    .header-logo { width: 100%; max-width: 450px; margin-bottom: 10px; }
+    .divider { border-top: 2px solid #800000; margin: 15px 0; }
+    
+    .doc-title { text-align: center; font-weight: bold; font-size: 13pt; margin-bottom: 15px; color: #800000; }
+    
+    .meta-table, .data-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    .meta-table td { padding: 4px 6px; vertical-align: top; }
+    .meta-label { font-weight: bold; width: 25%; color: #444; }
+    
+    .section-header { font-weight: bold; background-color: #f2f2f2; padding: 6px; margin-top: 15px; margin-bottom: 5px; border-left: 4px solid #800000; }
+
+    .data-table th, .data-table td { border: 1px solid #b2b2b2; padding: 6px 8px; text-align: left; font-size: 10pt; }
+    .data-table th { background-color: #800000; color: white; font-weight: bold; }
+    .data-table tr:nth-child(even) { background-color: #fdfdfd; }
+    
+    .footer-block { margin-top: 30px; }
+    .signoff { margin-top: 40px; }
+  </style>
+</head>
+<body>
+
+  <!-- Header Logo -->
+  <img class="header-logo" src="https://www.youthforseva.org/assets/images/logo.png" alt="Youth For Seva Logo">
+  
+  <div class="divider"></div>
+
+  <div class="doc-title">REQUEST FOR ENTRY AND EXIT OF EVENT MATERIALS</div>
+
+  <table class="meta-table">
+    <tr>
+      <td class="meta-label">To:</td>
+      <td><?= data.address ?></td>
+      <td style="text-align: right; font-weight: bold;">Date: <?= data.letterDate ?></td>
+    </tr>
+  </table>
+
+  <p><strong>Subject:</strong> Request for Permission to Bring in and Remove Event Materials for the CSR Volunteering Activity</p>
+
+  <p>Dear Sir/Madam,</p>
+  <p>Greetings from Youth For Seva. As part of the CSR volunteering initiative being conducted in association with <strong><?= data.corporate ?></strong>, we kindly request your permission to bring the following event materials into the campus for the <strong><?= data.activityName ?></strong> scheduled on <strong><?= data.activityDate ?></strong>. These materials will be removed from the campus immediately after the successful completion of the event.</p>
+
+  <div class="section-header">Event Details</div>
+  <table class="meta-table" style="border: 1px solid #ddd;">
+    <tr><td class="meta-label">Event:</td><td><?= data.activityName ?></td></tr>
+    <tr><td class="meta-label">Organised By:</td><td>Youth For Seva</td></tr>
+    <tr><td class="meta-label">CSR Partner:</td><td><?= data.corporate ?></td></tr>
+    <tr><td class="meta-label">Event Date:</td><td><?= data.activityDate ?></td></tr>
+    <tr><td class="meta-label">Venue:</td><td><?= data.corporate ?> Campus</td></tr>
+  </table>
+
+  <div class="section-header">Materials to be Carried</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 10%;">Sl. No.</th>
+        <th style="width: 65%;">Material</th>
+        <th style="width: 25%;">Quantity</th>
+      </tr>
+    </thead>
+    <tbody>
+      <? for (var i = 0; i < data.materials.length; i++) { ?>
+        <tr>
+          <td><?= i + 1 ?></td>
+          <td><?= data.materials[i].item ?></td>
+          <td><?= data.materials[i].quantity ?></td>
+        </tr>
+      <? } ?>
+    </tbody>
+  </table>
+
+  <div class="section-header">Youth For Seva Representatives</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 10%;">Sl. No.</th>
+        <th style="width: 55%;">Name</th>
+        <th style="width: 35%;">Mobile Number</th>
+      </tr>
+    </thead>
+    <tbody>
+      <? for (var j = 0; j < data.representatives.length; j++) { ?>
+        <tr>
+          <td><?= j + 1 ?></td>
+          <td><?= data.representatives[j].name ?></td>
+          <td><?= data.representatives[j].contact ?></td>
+        </tr>
+      <? } ?>
+    </tbody>
+  </table>
+
+  <p>We request your kind approval and support in facilitating the entry and exit of the above-mentioned materials and personnel for the smooth conduct of the CSR volunteering activity. We sincerely appreciate your continued partnership and support in creating meaningful social impact. Thank you.</p>
+
+  <div class="footer-block">
+    <p>Yours faithfully,<br><strong>For Youth For Seva</strong></p>
+    <div class="signoff">
+      <strong><?= data.signoffName ?></strong><br>
+      <?= data.signoffDesignation ?> | <?= data.location ?><br>
+      <?= data.signoffPhone ?>
+    </div>
+  </div>
+
+</body>
+</html>
